@@ -11,6 +11,7 @@ from obdtool.core.errors import ObdError
 from obdtool.core.poller import LivePoller, read_supported_pids
 from obdtool.core.samples import SampleBatch, SessionStats
 from obdtool.core.service import LinkState, StateEvent
+from obdtool.core.timeseries import TimeSeriesStore
 from obdtool.ui.context import AppContext
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class AcquisitionController(QObject):
 		self.poller.set_interval(ctx.settings.polling.interval_ms)
 		ctx.service.poll_handler = self.poller
 		self.stats = SessionStats()
+		self.store = TimeSeriesStore()
 		self.supported: set[int] | None = None  # None = inconnu (pas de connexion)
 		self.running = True
 		self.replaying = False
@@ -100,7 +102,13 @@ class AcquisitionController(QObject):
 	def publish(self, batch: SampleBatch) -> None:
 		"""Diffuse un lot (utilisé par la relecture)."""
 		self.stats.add_batch(batch)
+		self.store.add_batch(batch)
 		self.batch.emit(batch)
+
+	def clear_data(self) -> None:
+		"""Efface les séries mémorisées et les statistiques."""
+		self.store.clear()
+		self.stats.reset()
 
 	def set_replaying(self, replaying: bool) -> None:
 		"""Pendant une relecture, l'interrogation de l'adaptateur est suspendue."""
@@ -140,5 +148,6 @@ class AcquisitionController(QObject):
 		if not isinstance(payload, SampleBatch) or self.replaying:
 			return
 		self.stats.add_batch(payload)
+		self.store.add_batch(payload)
 		self.rates_changed.emit(payload.query_rate, payload.cycle_rate)
 		self.batch.emit(payload)

@@ -8,6 +8,8 @@ import socket
 import time
 from typing import Any
 
+from obdtool.core.demo_sim import DrivingSimulator
+
 log = logging.getLogger(__name__)
 
 DEFAULT_SCENARIO = "car"
@@ -73,6 +75,7 @@ class DemoEmulator:
 		self.scenario = scenario
 		self.port = 0
 		self._elm: Any = None
+		self.simulator = DrivingSimulator()
 		self._filter: _EmulatorLogFilter | None = None
 
 	@property
@@ -129,6 +132,7 @@ class DemoEmulator:
 		import elm.obd_message as messages
 
 		self._install_dtc_overrides()
+		self._install_simulation()
 		if scenario == FAULTS_SCENARIO:
 			self._install_faults_scenario()
 			messages.DTC_STORED[:] = DEMO_STORED_DTCS
@@ -142,6 +146,37 @@ class DemoEmulator:
 			log.warning("Scénario d'émulateur inconnu : %s", scenario)
 			return
 		self._elm.set_sorted_obd_msg(scenario)
+
+	def _install_simulation(self) -> None:
+		"""Remplace les valeurs aléatoires de l'émulateur par le simulateur de conduite (valeurs continues).
+
+		Le masque 0100 est aussi ajusté pour ressembler au K4M : capteur MAP, pas de débitmètre (PID 10),
+		deux sondes lambda (PID 14 et 15).
+		"""
+		import elm.obd_message as messages
+
+		from obdtool.core.demo_sim import SIMULATED_PIDS
+
+		simulator = self.simulator
+		for name in ("car", FAULTS_SCENARIO):
+			scenario = self._elm.ObdMessage.get(name)
+			if scenario is None or "DEMO_SIM_0C" in scenario:
+				continue
+			for pid in (*SIMULATED_PIDS, 0x00):
+
+				def footer(emu: Any, cmd: str, pid_: str, uc_val: Any, pid: int = pid) -> str:
+					data = "BE 3E B8 13" if pid == 0x00 else simulator.pid_bytes(pid)
+					payload = f"41 {pid:02X} {data}"
+					size = f"{len(payload.split()):02X}"
+					return messages.HD(messages.ECU_R_ADDR_E) + messages.SZ(size) + messages.DT(payload)
+
+				scenario[f"DEMO_SIM_{pid:02X}"] = {
+					"Request": f"^01{pid:02X}" + messages.ELM_FOOTER,
+					"Descr": f"PID {pid:02X} simulé (démo)",
+					"Header": messages.ECU_ADDR_E,
+					"Priority": 1,
+					"ResponseFooter": footer,
+				}
 
 	def _install_dtc_overrides(self) -> None:
 		"""Réponses 03/07/0A conformes à SAE J1979 sur CAN (octet « nombre de codes » après le mode).
@@ -208,6 +243,7 @@ class DemoEmulator:
 				"ResponseFooter": footer,
 			}
 		self._install_dtc_overrides()
+		self._install_simulation()
 
 	def scenarios(self) -> list[str]:
 		"""Scénarios disponibles."""

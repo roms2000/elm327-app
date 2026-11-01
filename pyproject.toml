@@ -28,6 +28,7 @@ dev = [
 	"matplotlib>=3.8",
 	"pytest>=8",
 	"pytest-qt>=4.4",
+	"pytest-timeout>=2.3",
 	"ruff>=0.6",
 ]
 
@@ -68,4 +69,5 @@ markers = [
 	"hardware: tests nécessitant un adaptateur réel (désactivés par défaut)",
 ]
 addopts = "-m 'not hardware'"
+timeout = 120
 qt_api = "pyside6"

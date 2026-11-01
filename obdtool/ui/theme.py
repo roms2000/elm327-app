@@ -27,7 +27,7 @@ def apply_theme(app: QApplication, theme: str) -> None:
 	_dark_active = dark
 	app.setPalette(_dark_palette() if dark else _light_palette())
 	pg.setConfigOptions(
-		antialias=True, background="#1e1f22" if dark else "w", foreground="#d0d0d0" if dark else "#303030"
+		antialias=True, background="#1a1a19" if dark else "#fcfcfb", foreground="#c3c2b7" if dark else "#52514e"
 	)
 	app.setStyleSheet(_STYLE + _indicator_style(dark))
 
@@ -86,6 +86,26 @@ def _dark_palette() -> QPalette:
 	pal.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#6f7277"))
 	pal.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("#6f7277"))
 	return pal
+
+
+# Palette catégorielle des courbes (ordre fixe, validée daltonisme ; variantes claire / sombre).
+SERIES_LIGHT = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
+SERIES_DARK = ("#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767")
+
+
+def series_color(index: int) -> str:
+	"""Couleur de la courbe n° `index` (0 à 7) pour le thème actif."""
+	palette = SERIES_DARK if _dark_active else SERIES_LIGHT
+	return palette[index % len(palette)]
+
+
+def text_color() -> str:
+	"""Couleur du texte des graphiques."""
+	return "#c3c2b7" if _dark_active else "#52514e"
+
+
+def grid_alpha() -> float:
+	return 0.18 if _dark_active else 0.25
 
 
 # Couleurs d'état, lisibles dans les deux thèmes.

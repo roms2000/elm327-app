@@ -88,3 +88,29 @@ def test_dtc_page_reads_demo_faults(qtbot: QtBot) -> None:
 		assert page.history_table.rowCount() >= 1
 	finally:
 		window.shutdown()
+
+
+def test_charts_overlay_cursor_and_csv(qtbot: QtBot, tmp_path) -> None:
+	from obdtool.core.service import LinkState
+
+	settings = Settings()
+	settings.extra["charts"] = {"curves": ["RPM", "SPEED"], "mode": "overlay", "window": 30}
+	window = MainWindow(AppContext(settings))
+	qtbot.addWidget(window)
+	try:
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		page = window.pages["charts"]
+		window.show_page("charts")
+		qtbot.waitUntil(lambda: page._latest_time() is not None, timeout=10000)
+		qtbot.wait(1500)
+		assert len(page._views) == 2
+		page._set_cursor(page._latest_time() - 0.5)
+		assert "Régime moteur" in page.cursor_label.text()
+		bounds = window.acquisition.store.time_range()
+		rows = window.acquisition.store.export_csv(tmp_path / "c.csv", page.curves, *bounds)
+		assert rows > 0
+		page.mode.setCurrentIndex(page.mode.findData("stacked"))
+		assert len(page._plots) == 2
+	finally:
+		window.shutdown()

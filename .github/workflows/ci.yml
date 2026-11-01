@@ -31,4 +31,4 @@ jobs:
           ruff format --check .
           ruff check .
       - name: Tests
-        run: pytest -q
+        run: pytest -v --durations=10
