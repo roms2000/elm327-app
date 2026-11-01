@@ -15,7 +15,9 @@ def no_modal_dialogs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
 	shown: list[tuple[str, str]] = []
 
 	def fake(kind: str, answer: QMessageBox.StandardButton):
-		def _show(_parent: object, title: str, text: str, *args: object, **kwargs: object) -> QMessageBox.StandardButton:
+		def _show(
+			_parent: object, title: str, text: str, *args: object, **kwargs: object
+		) -> QMessageBox.StandardButton:
 			shown.append((title, text))
 			log.warning("Boîte %s ignorée : %s — %s", kind, title, text)
 			return answer
