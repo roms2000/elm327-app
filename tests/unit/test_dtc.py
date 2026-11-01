@@ -132,3 +132,36 @@ def test_clear_retries_with_longer_timeout() -> None:
 	link = Link()
 	dtc.clear_dtcs(link)  # type: ignore[arg-type]
 	assert link.sent == ["04", "ATSTFF", "04", "ATST32"]
+
+
+def test_clear_codes_engine_running_policy() -> None:
+	import pytest
+	from obd.protocols import ISO_15765_4_11bit_500k
+
+	from obdtool.core.errors import ErrorKind, ObdError
+	from obdtool.ui.pages.dtc_page import clear_codes
+
+	proto = ISO_15765_4_11bit_500k(["7E8 06 41 00 BE 3F A8 13"])
+
+	class Link:
+		def __init__(self, rpm_raw: str) -> None:
+			self.rpm_raw = rpm_raw
+			self.cleared = False
+
+		def request(self, request: str, fast: bool = False) -> list:
+			return [m for m in proto([f"7E8 04 41 0C {self.rpm_raw}"]) if m.data]
+
+		def send_raw(self, command: str, check: bool = True, timeout: float | None = None) -> list[str]:
+			self.cleared = command == "04" or self.cleared
+			return ["7E8 01 44"]
+
+	idle = Link("0B B8")  # 750 tr/min
+	with pytest.raises(ObdError) as err:
+		clear_codes(idle)  # type: ignore[arg-type]
+	assert err.value.kind == ErrorKind.BLOCKED and not idle.cleared
+	clear_codes(idle, allow_running=True)  # type: ignore[arg-type]
+	assert idle.cleared
+	revving = Link("4E 20")  # 5000 tr/min
+	with pytest.raises(ObdError):
+		clear_codes(revving, allow_running=True)  # type: ignore[arg-type]
+	assert not revving.cleared

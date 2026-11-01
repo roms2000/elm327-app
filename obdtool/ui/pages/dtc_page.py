@@ -45,7 +45,8 @@ log = logging.getLogger(__name__)
 
 _CLEAR_WARNING = """<p><b>Avant d'effacer les codes défaut :</b></p>
 <ul>
-<li>mettez le <b>contact</b>, <b>moteur arrêté</b> (la plupart des calculateurs refusent l'effacement moteur tournant) ;</li>
+<li>mettez le <b>contact</b>, <b>moteur arrêté</b> ; sur un véhicule sans clé dont le calculateur n'est joignable
+que moteur tournant, cochez « Autoriser moteur au ralenti » : véhicule à l'arrêt, frein serré, moteur au ralenti ;</li>
 <li>notez ou exportez les codes et le freeze frame : ils seront <b>perdus</b>.</li>
 </ul>
 <p><b>Conséquences :</b></p>
@@ -104,18 +105,30 @@ def read_full_checkup(link: ElmLink, make: str) -> DtcReport:
 	return report
 
 
-def clear_codes(link: ElmLink) -> None:
-	"""Vérifie que le moteur est arrêté puis efface les codes (thread de travail)."""
+IDLE_MAX_RPM = 1200
+
+
+def clear_codes(link: ElmLink, allow_running: bool = False) -> None:
+	"""Vérifie que le moteur est arrêté (ou au ralenti si autorisé) puis efface les codes (thread de travail).
+
+	`allow_running` sert aux véhicules sans clé dont le calculateur n'est joignable que moteur tournant.
+	"""
 	try:
 		rpm = decode_messages(pids.CATALOG["RPM"], link.request("010C"))
 	except ObdError as exc:
 		if exc.is_link_lost:
 			raise
 		rpm = None
-	if isinstance(rpm, float) and rpm > 300:
+	if isinstance(rpm, float) and allow_running and rpm > IDLE_MAX_RPM:
+		raise ObdError(ErrorKind.BLOCKED, f"Régime trop élevé ({rpm:.0f} tr/min) : laissez le moteur au ralenti.")
+	if isinstance(rpm, float) and not allow_running and rpm > 300:
 		raise ObdError(
-			ErrorKind.BLOCKED, f"Le moteur tourne ({rpm:.0f} tr/min) : arrêtez-le, contact mis, puis recommencez."
+			ErrorKind.BLOCKED,
+			f"Le moteur tourne ({rpm:.0f} tr/min) : arrêtez-le, contact mis, puis recommencez. Sur un véhicule sans clé "
+			"dont le calculateur n'est joignable que moteur tournant, cochez « Autoriser moteur au ralenti ».",
 		)
+	if isinstance(rpm, float) and rpm > 300:
+		log.warning("Effacement des codes moteur au ralenti (%.0f tr/min), à la demande de l'utilisateur", rpm)
 	dtc.clear_dtcs(link)
 
 
@@ -130,7 +143,7 @@ class ClearConfirmDialog(QDialog):
 		text.setWordWrap(True)
 		text.setTextFormat(Qt.TextFormat.RichText)
 		layout.addWidget(text)
-		self.understood = QCheckBox("J'ai compris : contact mis, moteur arrêté, codes notés.")
+		self.understood = QCheckBox("J'ai compris les conditions et les conséquences ; les codes sont notés.")
 		layout.addWidget(self.understood)
 		buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
 		self.ok = buttons.button(QDialogButtonBox.StandardButton.Ok)
@@ -159,6 +172,12 @@ class DtcPage(BasePage):
 		self.read_btn = QPushButton("Lire les codes")
 		self.read_btn.clicked.connect(self.read_codes)
 		self.clear_btn = QPushButton("Effacer les codes…")
+		self.allow_running = QCheckBox("Autoriser moteur au ralenti")
+		self.allow_running.setToolTip(
+			"Pour les véhicules sans clé dont le calculateur n'est joignable que moteur tournant.\n"
+			"Véhicule à l'arrêt, frein de stationnement serré, moteur au ralenti (moins de 1200 tr/min).\n"
+			"La plupart des calculateurs l'acceptent ; certains refusent l'effacement moteur tournant."
+		)
 		self.clear_btn.clicked.connect(self._clear)
 		self.export_btn = QPushButton("Exporter le rapport…")
 		self.export_btn.clicked.connect(self._export)
@@ -167,7 +186,7 @@ class DtcPage(BasePage):
 			"Codes, freeze frame, moniteurs, tests mode 06 et identification dans un rapport HTML"
 		)
 		self.checkup_btn.clicked.connect(self.full_checkup)
-		for button in (self.read_btn, self.clear_btn, self.export_btn, self.checkup_btn):
+		for button in (self.read_btn, self.clear_btn, self.allow_running, self.export_btn, self.checkup_btn):
 			bar.addWidget(button)
 		bar.addSpacing(20)
 		bar.addWidget(QLabel("Kilométrage (facultatif) :"))
@@ -392,7 +411,12 @@ class DtcPage(BasePage):
 			self.clear_btn.setEnabled(True)
 			QMessageBox.warning(self, "Effacement impossible", error.user_message)
 
-		self.ctx.bridge.run(self.ctx.service.submit(clear_codes, "effacement des codes", priority=1), done, failed)
+		allow = self.allow_running.isChecked()
+		self.ctx.bridge.run(
+			self.ctx.service.submit(lambda link: clear_codes(link, allow), "effacement des codes", priority=1),
+			done,
+			failed,
+		)
 
 	# -------------------------------------------------------------- rapport
 	def _export(self) -> None:

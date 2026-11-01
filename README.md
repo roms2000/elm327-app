@@ -189,7 +189,10 @@ l'effacement et VIN. Chaque code est décrit :
 5. à défaut, la structure du code (système, générique ou constructeur, sous-système).
 
 **Effacer les codes** : double confirmation, rappel des conditions (contact mis, moteur arrêté, vérifié par
-l'application) et des conséquences (moniteurs remis à zéro, freeze frames perdus).
+l'application) et des conséquences (moniteurs remis à zéro, freeze frames perdus). Sur les véhicules sans clé dont
+le calculateur n'est joignable que moteur tournant (cas de la Clio III à carte), la case « Autoriser moteur au
+ralenti » permet l'effacement au ralenti (moins de 1200 tr/min), véhicule à l'arrêt. Si le calculateur ne
+confirme pas dans le délai par défaut de l'ELM327, une seconde tentative est faite avec un délai allongé.
 
 **Historique local** : chaque lecture et chaque effacement sont enregistrés (date, codes, voyant, distance depuis
 l'effacement, kilométrage saisi à la main). Un code revenu après un effacement est signalé.
