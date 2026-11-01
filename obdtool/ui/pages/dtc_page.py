@@ -89,6 +89,21 @@ def read_full_report(link: ElmLink, make: str) -> DtcReport:
 	return report
 
 
+def read_full_checkup(link: ElmLink, make: str) -> DtcReport:
+	"""Bilan complet : codes, freeze frame, moniteurs, tests mode 06, identification."""
+	from obdtool.core.onboard_tests import read_mode06
+	from obdtool.core.readiness import read_readiness
+	from obdtool.core.vehicle_info import read_vehicle_info
+
+	report = read_full_report(link, make)
+	report.readiness = read_readiness(link, 0x01)
+	report.tests = read_mode06(link)
+	report.vehicle_info = read_vehicle_info(link)
+	if report.vehicle_info.vin:
+		report.vin = report.vehicle_info.vin
+	return report
+
+
 def clear_codes(link: ElmLink) -> None:
 	"""Vérifie que le moteur est arrêté puis efface les codes (thread de travail)."""
 	try:
@@ -147,7 +162,12 @@ class DtcPage(BasePage):
 		self.clear_btn.clicked.connect(self._clear)
 		self.export_btn = QPushButton("Exporter le rapport…")
 		self.export_btn.clicked.connect(self._export)
-		for button in (self.read_btn, self.clear_btn, self.export_btn):
+		self.checkup_btn = QPushButton("Bilan complet…")
+		self.checkup_btn.setToolTip(
+			"Codes, freeze frame, moniteurs, tests mode 06 et identification dans un rapport HTML"
+		)
+		self.checkup_btn.clicked.connect(self.full_checkup)
+		for button in (self.read_btn, self.clear_btn, self.export_btn, self.checkup_btn):
 			bar.addWidget(button)
 		bar.addSpacing(20)
 		bar.addWidget(QLabel("Kilométrage (facultatif) :"))
@@ -393,6 +413,34 @@ class DtcPage(BasePage):
 			return
 		self.ctx.notify(f"Rapport enregistré : {path}")
 
+	def full_checkup(self) -> None:
+		"""Lit tout et propose d'enregistrer le bilan au format HTML."""
+		if self.ctx.service.state != LinkState.CONNECTED:
+			QMessageBox.information(self, "Bilan", "Connectez-vous au véhicule d'abord.")
+			return
+		self.checkup_btn.setEnabled(False)
+		self.status.setText("Bilan en cours (codes, moniteurs, tests, identification)…")
+		make = self._make()
+
+		def done(report: DtcReport) -> None:
+			self.checkup_btn.setEnabled(True)
+			self._on_report(report)
+			default = Path.home() / f"bilan_obd_{datetime.now():%Y%m%d_%H%M}.html"
+			path, _ = QFileDialog.getSaveFileName(self, "Enregistrer le bilan", str(default), "Page HTML (*.html)")
+			if path:
+				Path(path).write_text(to_html(report), encoding="utf-8")
+				self.ctx.notify(f"Bilan enregistré : {path}")
+
+		def failed(error: ObdError) -> None:
+			self.checkup_btn.setEnabled(True)
+			self._on_error(error)
+
+		self.ctx.bridge.run(
+			self.ctx.service.submit(lambda link: read_full_checkup(link, make), "bilan complet", priority=1),
+			done,
+			failed,
+		)
+
 	# ------------------------------------------------------------ historique
 	def _load_history(self) -> None:
 		records = self.history.records()
@@ -446,5 +494,6 @@ class DtcPage(BasePage):
 		connected = event.state == LinkState.CONNECTED
 		self.read_btn.setEnabled(connected)
 		self.clear_btn.setEnabled(connected)
+		self.checkup_btn.setEnabled(connected)
 		if not connected and event.state != LinkState.CONNECTING:
 			self.status.setText("Connectez-vous au véhicule pour lire les codes défaut.")

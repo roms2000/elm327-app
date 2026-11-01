@@ -6,9 +6,11 @@ import argparse
 import logging
 import sys
 import traceback
+from pathlib import Path
 from types import TracebackType
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QCheckBox, QMessageBox, QWidget
 
 from obdtool import APP_DISPLAY_NAME, APP_NAME, __version__
@@ -95,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
 	app.setApplicationDisplayName(APP_DISPLAY_NAME)
 	app.setApplicationVersion(__version__)
 	app.setDesktopFileName(APP_NAME)
+	icon = Path(__file__).parent / "resources" / "obdtool.svg"
+	if icon.exists():
+		app.setWindowIcon(QIcon(str(icon)))
 	theme.apply_theme(app, settings.general.theme)
 
 	ctx = AppContext(settings)

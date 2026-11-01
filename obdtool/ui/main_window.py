@@ -26,6 +26,7 @@ from obdtool.ui.acquisition import AcquisitionController
 from obdtool.ui.alert_control import AlertBanner, AlertController
 from obdtool.ui.context import AppContext
 from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
+from obdtool.ui.pages.analysis_page import AnalysisPage
 from obdtool.ui.pages.base import BasePage, PlaceholderPage
 from obdtool.ui.pages.charts_page import ChartsPage
 from obdtool.ui.pages.connection_page import ConnectionPage
@@ -54,6 +55,7 @@ PAGE_TITLES = [
 	("tests", "Tests embarqués"),
 	("vehicle", "Infos véhicule"),
 	("performance", "Performances"),
+	("analysis", "Analyses"),
 	("sessions", "Sessions"),
 	("console", "Console"),
 	("settings", "Paramètres"),
@@ -118,6 +120,8 @@ class MainWindow(QMainWindow):
 			return DtcPage(self.ctx)
 		if key == "charts":
 			return ChartsPage(self.ctx, self.acquisition)
+		if key == "analysis":
+			return AnalysisPage(self.ctx, self.acquisition)
 		if key == "console":
 			return ConsolePage(self.ctx, self.acquisition)
 		if key == "performance":

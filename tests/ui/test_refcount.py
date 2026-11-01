@@ -13,8 +13,6 @@ import pytest
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QCheckBox, QLabel, QPushButton
 
-pytestmark = pytest.mark.skipif(sys.version_info >= (3, 12), reason="booléens immortels depuis Python 3.12")
-
 
 class _Emitter(QObject):
 	obj = Signal(object)
@@ -28,6 +26,7 @@ def _drift(func, repeat: int = 2000) -> tuple[int, int]:
 	return sys.getrefcount(True) - true_before, sys.getrefcount(False) - false_before
 
 
+@pytest.mark.skipif(sys.version_info >= (3, 12), reason="booléens immortels depuis Python 3.12")
 def test_report_bool_refcount_drift(qtbot) -> None:
 	emitter = _Emitter()
 	received = []
@@ -51,16 +50,31 @@ def test_report_bool_refcount_drift(qtbot) -> None:
 		"connect": lambda: emitter.obj.connect(received.append),
 	}
 
-	def threaded_emit() -> None:
-		thread = threading.Thread(target=lambda: [emitter.obj.emit(i) for i in range(2000)])
-		thread.start()
-		thread.join()
-
-	candidates["Signal.emit depuis un thread"] = threaded_emit
 	report = {}
 	for name, func in candidates.items():
-		report[name] = _drift(func, 1 if name == "Signal.emit depuis un thread" else 2000)
+		report[name] = _drift(func)
 	for name, (dt, df) in report.items():
 		print(f"refcount drift {name}: True {dt:+d}, False {df:+d}")
 	leaking = {name: drift for name, drift in report.items() if drift[0] < -100 or drift[1] < -100}
 	assert not leaking, f"Appels qui volent des références à True/False : {leaking}"
+
+
+def test_bridge_never_emits_from_worker_thread(qtbot) -> None:
+	"""Les signaux du pont doivent être émis dans le thread de l'interface (cf. défaut PySide6 / Python 3.11)."""
+	from obdtool.core.service import DiagnosticService, LinkState, StateEvent
+	from obdtool.ui.bridge import ServiceBridge
+
+	service = DiagnosticService()
+	bridge = ServiceBridge(service)
+	main = threading.get_ident()
+	threads = []
+	bridge.state_changed.connect(lambda _e: threads.append(threading.get_ident()))
+	try:
+		worker = threading.Thread(target=lambda: service._emit(StateEvent(LinkState.CONNECTING)))
+		worker.start()
+		worker.join()
+		qtbot.waitUntil(lambda: bool(threads), timeout=2000)
+		assert threads == [main]
+	finally:
+		bridge.detach()
+		service.shutdown()

@@ -9,6 +9,9 @@ from datetime import datetime
 from obdtool import APP_DISPLAY_NAME, __version__
 from obdtool.core import pids
 from obdtool.core.dtc import DtcEntry, DtcKind, FreezeFrame, MilStatus
+from obdtool.core.onboard_tests import TestsReport
+from obdtool.core.readiness import MonitorState, ReadinessReport
+from obdtool.core.vehicle_info import VehicleInfo
 
 
 @dataclass
@@ -26,6 +29,10 @@ class DtcReport:
 	distance_since_clear: float | None = None
 	distance_with_mil: float | None = None
 	created: datetime = field(default_factory=datetime.now)
+	# Bilan complet (facultatif)
+	readiness: ReadinessReport | None = None
+	tests: TestsReport | None = None
+	vehicle_info: VehicleInfo | None = None
 
 
 def _value(definition: pids.PidDef, value: float | str | None) -> str:
@@ -147,5 +154,55 @@ small {{ color: #777; font-weight: normal; }}
 {"".join(sections)}
 <h2>Freeze frame <small>(mode 02)</small></h2>
 {freeze_html}
+{_full_sections(report, esc)}
 </body></html>
 """
+
+
+def _full_sections(report: DtcReport, esc) -> str:  # type: ignore[no-untyped-def]
+	"""Sections du bilan complet : moniteurs, tests embarqués, identification."""
+	parts = []
+	if report.vehicle_info is not None:
+		info = report.vehicle_info
+		rows = [
+			("CAL ID", ", ".join(info.calibration_ids or []) or "non supporté"),
+			("CVN", ", ".join(info.cvns or []) or "non supporté"),
+			("Calculateur", info.ecu_name or "non supporté"),
+			("Sondes lambda", info.o2_sensors or "non supporté"),
+		]
+		for key, value in info.mode01.items():
+			definition = pids.CATALOG[key]
+			rows.append((definition.name, "non supporté" if value is None else _value(definition, value)))
+		parts.append(
+			"<h2>Identification</h2><table>"
+			+ "".join(f"<tr><th>{esc(a)}</th><td>{esc(b)}</td></tr>" for a, b in rows)
+			+ "</table>"
+		)
+	if report.readiness is not None:
+		ready = report.readiness.ready_for_inspection()
+		verdict = "<b style='color:#2e7d32'>OUI</b>" if ready else "<b style='color:#c62828'>NON</b>"
+		rows = "".join(
+			f"<tr><th>{esc(m.name)}</th><td>{esc(m.state.value)}</td></tr>"
+			for m in report.readiness.monitors
+			if m.state != MonitorState.UNSUPPORTED
+		)
+		parts.append(
+			f"<h2>Moniteurs de préparation</h2><p>Prêt pour un contrôle anti-pollution : {verdict}</p><table>{rows}</table>"
+		)
+	if report.tests is not None:
+		if report.tests.unavailable:
+			body = f"<p><i>{esc(report.tests.unavailable)}</i></p>"
+		else:
+			rows = "".join(
+				f"<tr><td>{esc(r.mid_name)}</td><td>{esc(r.tid_name)}</td><td>{esc(pids.format_value(r.value))}</td>"
+				f"<td>{esc(pids.format_value(r.minimum))} – {esc(pids.format_value(r.maximum))}</td><td>{esc(r.unit)}</td>"
+				f"<td>{esc(r.status)}</td></tr>"
+				for r in report.tests.results
+			)
+			body = (
+				"<table><tr><th>Moniteur</th><th>Test</th><th>Valeur</th><th>Limites</th><th>Unité</th><th>Statut</th></tr>"
+				+ rows
+				+ "</table>"
+			)
+		parts.append(f"<h2>Tests embarqués <small>(mode 06)</small></h2>{body}")
+	return "\n".join(parts)

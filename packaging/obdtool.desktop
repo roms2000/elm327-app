@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OBDTool
+GenericName=Diagnostic OBD-II
+Comment=Diagnostic automobile OBD-II avec adaptateur ELM327
+Exec=obdtool
+Icon=obdtool
+Terminal=false
+Categories=Utility;
+Keywords=OBD;OBD2;ELM327;voiture;diagnostic;automobile;
+StartupWMClass=obdtool

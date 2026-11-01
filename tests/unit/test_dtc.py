@@ -98,3 +98,19 @@ def test_report_text_and_html() -> None:
 	page = to_html(report)
 	assert page.startswith("<!doctype html>") and "VF1BR0B0H12345678" in page
 	assert "<script" not in page
+
+
+def test_full_report_sections() -> None:
+	from obdtool.core.onboard_tests import TestResult, TestsReport
+	from obdtool.core.readiness import decode_status
+	from obdtool.core.vehicle_info import VehicleInfo
+
+	report = DtcReport(
+		entries={DtcKind.STORED: []},
+		readiness=decode_status(bytes([0x00, 0x07, 0x65, 0x00])),
+		tests=TestsReport(results=[TestResult(0x21, "Catalyseur banc 1", 0x81, "Test 81", 0.2, 0.0, 1.0, "", True)]),
+		vehicle_info=VehicleInfo(calibration_ids=["312J6"], mode01={"FUEL_TYPE": "Essence"}),
+	)
+	page = to_html(report)
+	assert "Moniteurs de préparation" in page and "OUI" in page
+	assert "Catalyseur banc 1" in page and "312J6" in page and "Essence" in page

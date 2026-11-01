@@ -1,12 +1,18 @@
-"""Relais Qt des événements du service de diagnostic (thread de travail → thread de l'interface)."""
+"""Relais Qt des événements du service de diagnostic (thread de travail → thread de l'interface).
+
+Le thread de travail n'émet jamais de signal Qt : il dépose les événements dans une file, vidée par un
+minuteur du thread de l'interface. (Émettre un signal PySide6 depuis un thread Python dérègle le compteur de
+références de True sous Python 3.11 et finit par faire planter l'interpréteur.)
+"""
 
 from __future__ import annotations
 
+import queue
 from collections.abc import Callable
 from concurrent.futures import Future
 from typing import Any
 
-from PySide6.QtCore import QObject, Qt, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal
 
 from obdtool.core.errors import ErrorKind, ObdError
 from obdtool.core.service import (
@@ -19,22 +25,27 @@ from obdtool.core.service import (
 	VoltageEvent,
 )
 
+DRAIN_INTERVAL_MS = 20
+
 
 class ServiceBridge(QObject):
-	"""Transforme les événements du service en signaux Qt, reçus dans le thread de l'interface."""
+	"""Transforme les événements du service en signaux Qt émis dans le thread de l'interface."""
 
 	state_changed = Signal(object)  # StateEvent
 	error = Signal(object)  # ErrorEvent
 	voltage = Signal(object)  # float | None
 	raw = Signal(object)  # RawEvent
 	poll = Signal(object)  # contenu de PollEvent
-	_finished = Signal(object, object, object)  # future, on_done, on_error
 
 	def __init__(self, service: DiagnosticService, parent: QObject | None = None) -> None:
 		super().__init__(parent)
 		self.service = service
 		self._alive = True
-		self._finished.connect(self._dispatch, Qt.ConnectionType.QueuedConnection)
+		self._queue: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
+		self._timer = QTimer(self)
+		self._timer.setInterval(DRAIN_INTERVAL_MS)
+		self._timer.timeout.connect(self.drain)
+		self._timer.start()
 		service.subscribe(self._on_event)
 		self.destroyed.connect(lambda *_: self.detach())
 
@@ -44,19 +55,9 @@ class ServiceBridge(QObject):
 		self.service.unsubscribe(self._on_event)
 
 	def _on_event(self, event: Event) -> None:
-		# Appelé dans le thread de travail : les signaux sont mis en file vers le thread de l'interface.
-		if not self._alive:
-			return
-		if isinstance(event, StateEvent):
-			self.state_changed.emit(event)
-		elif isinstance(event, ErrorEvent):
-			self.error.emit(event)
-		elif isinstance(event, VoltageEvent):
-			self.voltage.emit(event.voltage)
-		elif isinstance(event, RawEvent):
-			self.raw.emit(event)
-		elif isinstance(event, PollEvent):
-			self.poll.emit(event.payload)
+		# Appelé dans le thread de travail : aucun appel Qt ici.
+		if self._alive:
+			self._queue.put(("event", event))
 
 	def run(
 		self,
@@ -65,10 +66,31 @@ class ServiceBridge(QObject):
 		on_error: Callable[[ObdError], None] | None = None,
 	) -> Future:
 		"""Appelle `on_done(résultat)` ou `on_error(erreur)` dans le thread de l'interface à la fin de la tâche."""
-		future.add_done_callback(lambda f: self._alive and self._finished.emit(f, on_done, on_error))
+		future.add_done_callback(lambda f: self._alive and self._queue.put(("done", (f, on_done, on_error))))
 		return future
 
-	@Slot(object, object, object)
+	def drain(self) -> None:
+		"""Relaie les événements en attente (thread de l'interface)."""
+		while True:
+			try:
+				kind, payload = self._queue.get_nowait()
+			except queue.Empty:
+				return
+			if kind == "done":
+				self._dispatch(*payload)
+				continue
+			event = payload
+			if isinstance(event, StateEvent):
+				self.state_changed.emit(event)
+			elif isinstance(event, ErrorEvent):
+				self.error.emit(event)
+			elif isinstance(event, VoltageEvent):
+				self.voltage.emit(event.voltage)
+			elif isinstance(event, RawEvent):
+				self.raw.emit(event)
+			elif isinstance(event, PollEvent):
+				self.poll.emit(event.payload)
+
 	def _dispatch(self, future: Future, on_done: Callable[[Any], None] | None, on_error: Callable | None) -> None:
 		if future.cancelled():
 			return
