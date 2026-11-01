@@ -32,8 +32,11 @@ from obdtool.ui.pages.connection_page import ConnectionPage
 from obdtool.ui.pages.dashboard_page import DashboardPage
 from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
+from obdtool.ui.pages.monitors_page import MonitorsPage
 from obdtool.ui.pages.sessions_page import SessionsPage
 from obdtool.ui.pages.settings_page import SettingsPage
+from obdtool.ui.pages.tests_page import TestsPage
+from obdtool.ui.pages.vehicle_page import VehiclePage
 from obdtool.ui.session_control import SessionController
 from obdtool.ui.status_bar import AppStatusBar
 
@@ -113,6 +116,12 @@ class MainWindow(QMainWindow):
 			return DtcPage(self.ctx)
 		if key == "charts":
 			return ChartsPage(self.ctx, self.acquisition)
+		if key == "monitors":
+			return MonitorsPage(self.ctx)
+		if key == "tests":
+			return TestsPage(self.ctx)
+		if key == "vehicle":
+			return VehiclePage(self.ctx)
 		if key == "sessions":
 			return SessionsPage(self.ctx, self.sessions)
 		return PlaceholderPage(title)

@@ -280,7 +280,7 @@ def format_value(value: float | str | None, unit: str = "", decimals: int | None
 	if decimals is None:
 		magnitude = abs(value)
 		decimals = 0 if magnitude >= 100 else 1 if magnitude >= 10 else 2 if magnitude >= 1 else 3
-		if unit in ("tr/min", "km/h", "kPa", "s", "km", "min", "Pa"):
+		if unit in ("tr/min", "km/h", "kPa", "s", "km", "min", "Pa") or (not unit and float(value).is_integer()):
 			decimals = 0
 	text = f"{value:.{decimals}f}".replace(".", ",")
 	return text

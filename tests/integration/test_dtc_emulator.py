@@ -46,3 +46,23 @@ def test_read_freeze_and_clear(faulty_link: tuple[ElmLink, DemoEmulator]) -> Non
 
 	emu.set_scenario("car")
 	assert dtc.read_dtcs(link, dtc.DtcKind.STORED) == []
+
+
+def test_readiness_tests_and_vehicle_info(faulty_link: tuple[ElmLink, DemoEmulator]) -> None:
+	from obdtool.core import onboard_tests, readiness, vehicle_info
+
+	link, _emu = faulty_link
+	report = readiness.read_readiness(link, 0x01)
+	assert report is not None and report.mil_on and not report.ready_for_inspection()
+	assert readiness.read_readiness(link, 0x41) is None  # non supporté par l'émulateur
+	tests = onboard_tests.read_mode06(link)
+	assert not tests.unavailable and len(tests.results) > 5
+	assert onboard_tests.read_mode05(link).unavailable.startswith("Mode 05 non disponible en CAN")
+	info = vehicle_info.read_vehicle_info(link)
+	assert info.vin and len(info.vin) == 17
+	assert info.ecu_name == "ECM-EngineControl"
+	assert info.ipt and info.ipt["OBDCOND"] > 0
+	assert info.mode01["OBD_COMPLIANCE"] == "EOBD (Europe)"
+	dtc.clear_dtcs(link)
+	cleared = readiness.read_readiness(link, 0x01)
+	assert cleared is not None and len(cleared.incomplete_non_continuous) == 4

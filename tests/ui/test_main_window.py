@@ -175,3 +175,28 @@ def test_dashboard_and_alerts(qtbot: QtBot) -> None:
 		assert "Température" in window.banner.label.text()
 	finally:
 		window.shutdown()
+
+
+def test_monitors_tests_vehicle_pages(qtbot: QtBot) -> None:
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.show()
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		window.show_page("monitors")
+		monitors = window.pages["monitors"]
+		qtbot.waitUntil(lambda: monitors.since_clear.rowCount() > 5, timeout=10000)
+		assert "contrôle anti-pollution" in monitors.summary.text()
+		window.show_page("vehicle")
+		vehicle = window.pages["vehicle"]
+		qtbot.waitUntil(lambda: vehicle.table.rowCount() > 5, timeout=10000)
+		assert vehicle.table.item(0, 1).text().startswith("WP0")
+		tests = window.pages["tests"]
+		tests._read06()
+		qtbot.waitUntil(lambda: tests.table06.rowCount() > 5, timeout=10000)
+		assert not tests.run08.isEnabled()
+	finally:
+		window.shutdown()
