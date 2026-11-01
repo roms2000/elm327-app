@@ -243,9 +243,15 @@ def clear_dtcs(link: ElmLink) -> None:
 			link.send_raw("ATST32", check=False)
 	if not any("44" in line.replace(" ", "")[:8] for line in lines):
 		log.warning("Réponse inattendue à l'effacement : %s", lines)
-		raise ObdError(
-			ErrorKind.NEGATIVE_RESPONSE, "Le calculateur a refusé l'effacement (moteur tournant ?).", raw=lines
-		)
+		compact = " ".join(lines).replace(" ", "").upper()
+		if "7F0422" in compact:
+			raise ObdError(
+				ErrorKind.NEGATIVE_RESPONSE,
+				"Le calculateur refuse l'effacement dans ces conditions (code 0x22, en général moteur tournant). "
+				"Recommencez contact mis, moteur arrêté.",
+				raw=lines,
+			)
+		raise ObdError(ErrorKind.NEGATIVE_RESPONSE, "Le calculateur a refusé l'effacement.", raw=lines)
 	log.info("Codes défaut effacés (mode 04)")
 
 
