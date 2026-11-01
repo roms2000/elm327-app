@@ -33,6 +33,7 @@ from obdtool.ui.pages.dashboard_page import DashboardPage
 from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
 from obdtool.ui.pages.monitors_page import MonitorsPage
+from obdtool.ui.pages.performance_page import PerformancePage
 from obdtool.ui.pages.sessions_page import SessionsPage
 from obdtool.ui.pages.settings_page import SettingsPage
 from obdtool.ui.pages.tests_page import TestsPage
@@ -116,6 +117,8 @@ class MainWindow(QMainWindow):
 			return DtcPage(self.ctx)
 		if key == "charts":
 			return ChartsPage(self.ctx, self.acquisition)
+		if key == "performance":
+			return PerformancePage(self.ctx, self.acquisition)
 		if key == "monitors":
 			return MonitorsPage(self.ctx)
 		if key == "tests":
@@ -157,6 +160,9 @@ class MainWindow(QMainWindow):
 		self.record_action.setShortcut(QKeySequence("Ctrl+R"))
 		self.record_action.triggered.connect(self.toggle_recording)
 		file_menu.addAction(self.record_action)
+		profile_action = QAction("Profil véhicule…", self)
+		profile_action.triggered.connect(self.edit_profile)
+		file_menu.addAction(profile_action)
 		file_menu.addSeparator()
 		quit_action = QAction("&Quitter", self)
 		quit_action.setShortcut(QKeySequence.StandardKey.Quit)
@@ -180,6 +186,15 @@ class MainWindow(QMainWindow):
 		about = QAction("À propos", self)
 		about.triggered.connect(self._about)
 		help_menu.addAction(about)
+
+	def edit_profile(self) -> None:
+		"""Ouvre l'éditeur de profils véhicule."""
+		from obdtool.ui.profile_dialog import ProfileDialog
+
+		dialog = ProfileDialog(self.acquisition.profile, self)
+		if dialog.exec():
+			self.acquisition.set_profile(dialog.selected)
+			self.ctx.save_settings()
 
 	def toggle_recording(self) -> None:
 		"""Démarre ou arrête l'enregistrement de session."""

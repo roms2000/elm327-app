@@ -21,8 +21,8 @@ _PHASES: tuple[tuple[float, float | None], ...] = (
 	(8.0, None),
 	(14.0, 7.5),  # 0 → ~105 km/h
 	(14.0, 0.0),  # croisière
-	(6.0, -4.0),  # ralentissement vers ~80
-	(6.0, 6.5),  # reprise 80 → ~120
+	(6.0, -5.0),  # ralentissement vers ~75
+	(7.0, 6.5),  # reprise 75 → ~120
 	(10.0, 0.0),
 	(18.0, -6.5),  # freinage moteur jusqu'à l'arrêt
 	(6.0, None),

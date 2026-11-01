@@ -7,8 +7,10 @@ import logging
 from PySide6.QtCore import QObject, Signal
 
 from obdtool.core import pids
+from obdtool.core.calc import DERIVED_INPUTS, DerivedEngine
 from obdtool.core.errors import ObdError
 from obdtool.core.poller import LivePoller, read_supported_pids
+from obdtool.core.profile import VehicleProfile, find_profile
 from obdtool.core.samples import SampleBatch, SessionStats
 from obdtool.core.service import LinkState, StateEvent
 from obdtool.core.timeseries import TimeSeriesStore
@@ -37,10 +39,13 @@ class AcquisitionController(QObject):
 		ctx.service.poll_handler = self.poller
 		self.stats = SessionStats()
 		self.store = TimeSeriesStore()
+		self.derived = DerivedEngine()
+		self.set_profile(find_profile(str(ctx.settings.extra.get("vehicle_profile", ""))))
 		self.supported: set[int] | None = None  # None = inconnu (pas de connexion)
 		self.running = True
 		self.replaying = False
 		self._requirements: dict[str, list[str]] = {}
+		self._exclusive: list[str] | None = None
 		selection = ctx.settings.polling.selected_pids or list(pids.DEFAULT_SELECTION)
 		self._requirements["live"] = [k for k in selection if pids.get(k)]
 		ctx.bridge.state_changed.connect(self._on_state)
@@ -62,14 +67,36 @@ class AcquisitionController(QObject):
 		self._requirements[owner] = list(dict.fromkeys(keys))
 		self._apply_selection()
 
+	@property
+	def exclusive(self) -> list[str] | None:
+		"""Sélection exclusive temporaire (mode chrono) : remplace toutes les autres demandes."""
+		return self._exclusive
+
+	@exclusive.setter
+	def exclusive(self, keys: list[str] | None) -> None:
+		if keys != self._exclusive:
+			self._exclusive = keys
+			self._apply_selection()
+
 	def effective_selection(self) -> list[str]:
-		"""Union des valeurs demandées, limitée aux PID supportés si on les connaît."""
+		"""Union des valeurs demandées (et des entrées des valeurs calculées), limitée aux PID supportés."""
+		if self._exclusive:
+			return [k for k in self._exclusive if self.is_available(k)]
 		keys: list[str] = []
 		for owner_keys in self._requirements.values():
 			for key in owner_keys:
-				if key not in keys and self.is_available(key):
-					keys.append(key)
+				for needed in (key, *DERIVED_INPUTS.get(key, ())):
+					if needed not in keys and self.is_available(needed):
+						keys.append(needed)
 		return keys
+
+	def set_profile(self, profile: VehicleProfile) -> None:
+		"""Profil véhicule utilisé par les valeurs calculées."""
+		self.profile = profile
+		self.derived.profile = profile
+		self.ctx.settings.extra["vehicle_profile"] = profile.name
+		self.ctx.settings.extra["vehicle_name"] = profile.name
+		self.ctx.settings.extra["vehicle_make"] = profile.make
 
 	def is_available(self, key: str) -> bool:
 		"""Vrai si la valeur peut être interrogée sur ce véhicule (ou si on ne sait pas encore)."""
@@ -99,16 +126,23 @@ class AcquisitionController(QObject):
 	def reset_stats(self) -> None:
 		self.stats.reset()
 
+	def _complete(self, batch: SampleBatch) -> None:
+		"""Ajoute au lot les valeurs calculées (dérivées des mesures et du profil)."""
+		batch.samples = [s for s in batch.samples if not s.key.endswith("_DERIVED")]
+		batch.samples.extend(self.derived.process(batch))
+
 	def publish(self, batch: SampleBatch) -> None:
 		"""Diffuse un lot (utilisé par la relecture)."""
+		self._complete(batch)
 		self.stats.add_batch(batch)
 		self.store.add_batch(batch)
 		self.batch.emit(batch)
 
 	def clear_data(self) -> None:
-		"""Efface les séries mémorisées et les statistiques."""
+		"""Efface les séries mémorisées, les statistiques et les cumuls de session."""
 		self.store.clear()
 		self.stats.reset()
+		self.derived.reset()
 
 	def set_replaying(self, replaying: bool) -> None:
 		"""Pendant une relecture, l'interrogation de l'adaptateur est suspendue."""
@@ -133,6 +167,8 @@ class AcquisitionController(QObject):
 
 	def _on_supported(self, supported: set[int]) -> None:
 		self.supported = supported
+		self.derived.has_maf = 0x10 in supported
+		self.derived.has_fuel_rate = 0x5E in supported
 		self.supported_changed.emit()
 		self._apply_selection()
 		self.set_running(self.running)
@@ -147,6 +183,7 @@ class AcquisitionController(QObject):
 	def _on_poll(self, payload: object) -> None:
 		if not isinstance(payload, SampleBatch) or self.replaying:
 			return
+		self._complete(payload)
 		self.stats.add_batch(payload)
 		self.store.add_batch(payload)
 		self.rates_changed.emit(payload.query_rate, payload.cycle_rate)

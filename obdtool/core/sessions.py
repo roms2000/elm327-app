@@ -98,6 +98,8 @@ class SessionRecorder:
 		if self._writer is None:
 			return
 		for sample in batch.samples:
+			if sample.key.endswith("_DERIVED"):
+				continue  # recalculées à la relecture avec le profil courant
 			definition = pids.get(sample.key)
 			value = (
 				""

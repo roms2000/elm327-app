@@ -200,3 +200,25 @@ def test_monitors_tests_vehicle_pages(qtbot: QtBot) -> None:
 		assert not tests.run08.isEnabled()
 	finally:
 		window.shutdown()
+
+
+def test_performance_page_and_derived_values(qtbot: QtBot) -> None:
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.show()
+		window.show_page("performance")
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		acq = window.acquisition
+		qtbot.waitUntil(lambda: acq.stats.get("AIRFLOW_DERIVED") is not None, timeout=10000)
+		assert "INTAKE_PRESSURE" in acq.effective_selection()
+		page = window.pages["performance"]
+		page.chrono_mode.setChecked(True)
+		assert acq.effective_selection() == ["SPEED", "RPM"]
+		window.show_page("live")
+		assert acq.exclusive is None
+	finally:
+		window.shutdown()
