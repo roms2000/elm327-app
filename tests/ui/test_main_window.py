@@ -253,3 +253,29 @@ def test_console_guard_and_commands(qtbot: QtBot, no_modal_dialogs: list) -> Non
 		assert window.acquisition.running
 	finally:
 		window.shutdown()
+
+
+def test_dtc_clear_during_engine_stop(qtbot: QtBot, monkeypatch) -> None:
+	import threading
+
+	from obdtool.core.service import LinkState
+	from obdtool.ui.pages.dtc_page import DtcPage
+
+	settings = Settings()
+	settings.connection.demo_scenario = "faults"
+	window = MainWindow(AppContext(settings))
+	qtbot.addWidget(window)
+	monkeypatch.setattr(DtcPage, "_confirm_clear", lambda self: True)
+	try:
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		emulator = window.ctx.service.emulator
+		emulator.refuse_clear_while_running = True
+		page = window.pages["dtc"]
+		threading.Timer(1.0, lambda: setattr(emulator, "engine_running", False)).start()
+		page._clear_during_stop()
+		qtbot.waitUntil(lambda: "effacés pendant la coupure" in page.status.text(), timeout=15000)
+		assert emulator.cleared
+		assert any(r.event == "clear" for r in page.history.records())
+	finally:
+		window.shutdown()

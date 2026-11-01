@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import html
 import logging
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
 import obd
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
 	QCheckBox,
@@ -168,6 +169,8 @@ class DtcPage(BasePage):
 		self.history = DtcHistory()
 		self.report: DtcReport | None = None
 
+		self.mil = QLabel()
+		self.mil.setTextFormat(Qt.TextFormat.RichText)
 		bar = QHBoxLayout()
 		self.read_btn = QPushButton("Lire les codes")
 		self.read_btn.clicked.connect(self.read_codes)
@@ -186,7 +189,19 @@ class DtcPage(BasePage):
 			"Codes, freeze frame, moniteurs, tests mode 06 et identification dans un rapport HTML"
 		)
 		self.checkup_btn.clicked.connect(self.full_checkup)
-		for button in (self.read_btn, self.clear_btn, self.allow_running, self.export_btn, self.checkup_btn):
+		self.clear_stop_btn = QPushButton("Effacer en coupant le moteur…")
+		self.clear_stop_btn.setToolTip(
+			"Véhicules sans clé dont le calculateur refuse l'effacement moteur tournant et s'éteint aussitôt "
+			"le moteur coupé :\nl'application répète la demande pendant que vous coupez le moteur."
+		)
+		self.clear_stop_btn.clicked.connect(self._clear_during_stop)
+		for button in (self.read_btn, self.clear_btn, self.allow_running, self.clear_stop_btn):
+			bar.addWidget(button)
+		bar.addStretch(1)
+		bar.addWidget(self.mil)
+		self.content.addLayout(bar)
+		bar = QHBoxLayout()
+		for button in (self.export_btn, self.checkup_btn):
 			bar.addWidget(button)
 		bar.addSpacing(20)
 		bar.addWidget(QLabel("Kilométrage (facultatif) :"))
@@ -198,9 +213,6 @@ class DtcPage(BasePage):
 		self.odometer.setToolTip("L'OBD générique ne donne pas le kilométrage : saisissez-le pour l'historique.")
 		bar.addWidget(self.odometer)
 		bar.addStretch(1)
-		self.mil = QLabel()
-		self.mil.setTextFormat(Qt.TextFormat.RichText)
-		bar.addWidget(self.mil)
 		self.content.addLayout(bar)
 
 		self.status = QLabel()
@@ -378,9 +390,10 @@ class DtcPage(BasePage):
 			self.freeze.setItem(row, 1, QTableWidgetItem(f"{text} {unit}".strip()))
 
 	# ------------------------------------------------------------ effacement
-	def _clear(self) -> None:
+	def _confirm_clear(self) -> bool:
+		"""Double confirmation avant tout effacement."""
 		if ClearConfirmDialog(self).exec() != QDialog.DialogCode.Accepted:
-			return
+			return False
 		answer = QMessageBox.warning(
 			self,
 			"Confirmer l'effacement",
@@ -388,22 +401,31 @@ class DtcPage(BasePage):
 			QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
 			QMessageBox.StandardButton.Cancel,
 		)
-		if answer != QMessageBox.StandardButton.Yes:
-			return
-		before = self.report
-		self.clear_btn.setEnabled(False)
+		return answer == QMessageBox.StandardButton.Yes
 
-		def done(_result: object) -> None:
-			self.clear_btn.setEnabled(True)
-			record = HistoryRecord(
+	def _record_clear(self, before: DtcReport | None, note: str = "") -> None:
+		self.history.add(
+			HistoryRecord(
 				timestamp=time.time(),
 				event="clear",
 				vin=before.vin if before else "",
 				odometer=self.odometer.value() or None,
 				stored=[e.code for e in (before.entries.get(dtc.DtcKind.STORED) or [])] if before else [],
 				pending=[e.code for e in (before.entries.get(dtc.DtcKind.PENDING) or [])] if before else [],
+				note=note,
 			)
-			self.history.add(record)
+		)
+		self._load_history()
+
+	def _clear(self) -> None:
+		if not self._confirm_clear():
+			return
+		before = self.report
+		self.clear_btn.setEnabled(False)
+
+		def done(_result: object) -> None:
+			self.clear_btn.setEnabled(True)
+			self._record_clear(before)
 			self.ctx.notify("Codes défaut effacés.")
 			self.read_codes()
 
@@ -414,6 +436,81 @@ class DtcPage(BasePage):
 		allow = self.allow_running.isChecked()
 		self.ctx.bridge.run(
 			self.ctx.service.submit(lambda link: clear_codes(link, allow), "effacement des codes", priority=1),
+			done,
+			failed,
+		)
+
+	def _clear_during_stop(self) -> None:
+		"""Effacement répété pendant la coupure du moteur (véhicules sans clé)."""
+		if not self._confirm_clear():
+			return
+		answer = QMessageBox.information(
+			self,
+			"Effacer en coupant le moteur",
+			"1. Moteur au ralenti, véhicule à l'arrêt, frein de stationnement serré.\n"
+			"2. Cliquez sur OK : l'application envoie la demande d'effacement en boucle "
+			"(le calculateur la refuse tant que le moteur tourne).\n"
+			"3. Coupez le moteur par un appui sur START/STOP dans les 60 secondes.\n\n"
+			"L'effacement est accepté pendant la coupure. Redémarrez ensuite et relisez les codes pour vérifier.",
+			QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+		)
+		if answer != QMessageBox.StandardButton.Ok:
+			return
+		before = self.report
+		stop = threading.Event()
+		progress = {"attempts": 0, "state": "en attente"}
+		dialog = QMessageBox(self)
+		dialog.setWindowTitle("Effacement en cours")
+		dialog.setIcon(QMessageBox.Icon.Information)
+		dialog.setText("<b>Coupez maintenant le moteur (START/STOP).</b>")
+		dialog.setStandardButtons(QMessageBox.StandardButton.Cancel)
+		dialog.button(QMessageBox.StandardButton.Cancel).clicked.connect(stop.set)
+		timer = QTimer(dialog)
+		timer.setInterval(150)
+		timer.timeout.connect(
+			lambda: dialog.setInformativeText(
+				f"Demandes envoyées : {progress['attempts']} — dernière : {progress['state']}"
+			)
+		)
+		timer.start()
+		dialog.setModal(False)
+		dialog.show()
+		self.clear_stop_btn.setEnabled(False)
+		self._clear_dialog = dialog
+
+		def on_attempt(count: int, state: str) -> None:  # thread de travail : simples affectations
+			progress["attempts"] = count
+			progress["state"] = state
+
+		def finish() -> None:
+			timer.stop()
+			dialog.done(0)
+			self.clear_stop_btn.setEnabled(self.ctx.service.state == LinkState.CONNECTED)
+
+		def done(attempts: int) -> None:
+			finish()
+			self._record_clear(before, "effacement pendant la coupure du moteur")
+			self.status.setText(
+				f"<span style='color:{theme.COLOR_OK}'>Codes effacés pendant la coupure du moteur "
+				f"(demande n° {attempts}).</span> Redémarrez puis cliquez sur « Lire les codes » pour vérifier."
+			)
+			QMessageBox.information(
+				self,
+				"Effacement réussi",
+				"Le calculateur a confirmé l'effacement. Redémarrez le moteur puis relisez les codes pour vérifier.",
+			)
+
+		def failed(error: ObdError) -> None:
+			finish()
+			if error.kind != ErrorKind.CANCELLED:
+				QMessageBox.warning(self, "Effacement impossible", error.user_message)
+
+		self.ctx.bridge.run(
+			self.ctx.service.submit(
+				lambda link: dtc.clear_during_engine_stop(link, stop.is_set, on_attempt),
+				"effacement pendant la coupure",
+				priority=1,
+			),
 			done,
 			failed,
 		)
@@ -518,6 +615,7 @@ class DtcPage(BasePage):
 		connected = event.state == LinkState.CONNECTED
 		self.read_btn.setEnabled(connected)
 		self.clear_btn.setEnabled(connected)
+		self.clear_stop_btn.setEnabled(connected)
 		self.checkup_btn.setEnabled(connected)
 		if not connected and event.state != LinkState.CONNECTING:
 			self.status.setText("Connectez-vous au véhicule pour lire les codes défaut.")

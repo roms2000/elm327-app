@@ -165,3 +165,35 @@ def test_clear_codes_engine_running_policy() -> None:
 	with pytest.raises(ObdError):
 		clear_codes(revving, allow_running=True)  # type: ignore[arg-type]
 	assert not revving.cleared
+
+
+def test_clear_response_parsing_and_switch_off() -> None:
+	import pytest
+
+	from obdtool.core.errors import ErrorKind, ObdError
+
+	assert dtc.clear_accepted(["7E8 01 44"]) and dtc.clear_accepted(["44"])
+	assert not dtc.clear_accepted(["7E8 03 7F 04 22"]) and dtc.clear_refused(["7E8 03 7F 04 22"])
+	assert not dtc.clear_accepted(["7E8 04 41 0C 44 00"])
+
+	class Link:
+		"""Refuse deux fois (moteur tournant), puis plus aucune réponse (calculateur éteint)."""
+
+		def __init__(self) -> None:
+			self.answers = [["7E8 03 7F 04 22"], ["7E8 03 7F 04 22"]]
+			self.sent: list[str] = []
+
+		def send_raw(self, command: str, check: bool = True, timeout: float | None = None) -> list[str]:
+			self.sent.append(command)
+			if command != "04":
+				return ["OK"]
+			if self.answers:
+				return self.answers.pop(0)
+			raise ObdError(ErrorKind.TIMEOUT)
+
+	link = Link()
+	with pytest.raises(ObdError) as err:
+		dtc.clear_during_engine_stop(link, window_s=5)  # type: ignore[arg-type]
+	assert "éteint" in err.value.user_message
+	assert link.sent[0] == "ATSTFF" and link.sent[-1] == "ATST32"
+	assert link.sent.count("04") == 5  # 2 refus + 3 silences

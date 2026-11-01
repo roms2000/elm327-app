@@ -79,6 +79,9 @@ class DemoEmulator:
 		self.simulator = DrivingSimulator()
 		self.dtcs: dict[str, list[str]] = {"03": [], "07": [], "0A": []}
 		self.cleared = False
+		# Comportement d'un calculateur de véhicule sans clé : effacement refusé moteur tournant (7F 04 22).
+		self.refuse_clear_while_running = False
+		self.engine_running = True
 		self._filter: _EmulatorLogFilter | None = None
 
 	@property
@@ -199,6 +202,8 @@ class DemoEmulator:
 			ours[f"DEMO_DTC_{mode}"] = self._entry(mode, f"Codes défaut mode {mode}", codes)
 
 		def clear(emu: Any, cmd: str, pid: str, uc_val: Any) -> str:
+			if self.refuse_clear_while_running and self.engine_running:
+				return self._answer("7F 04 22")
 			self.cleared = True
 			return self._answer("44")
 

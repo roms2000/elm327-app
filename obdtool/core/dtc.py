@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
@@ -241,7 +243,7 @@ def clear_dtcs(link: ElmLink) -> None:
 			lines = link.send_raw("04", timeout=10.0)
 		finally:
 			link.send_raw("ATST32", check=False)
-	if not any("44" in line.replace(" ", "")[:8] for line in lines):
+	if not clear_accepted(lines):
 		log.warning("Réponse inattendue à l'effacement : %s", lines)
 		compact = " ".join(lines).replace(" ", "").upper()
 		if "7F0422" in compact:
@@ -253,6 +255,81 @@ def clear_dtcs(link: ElmLink) -> None:
 			)
 		raise ObdError(ErrorKind.NEGATIVE_RESPONSE, "Le calculateur a refusé l'effacement.", raw=lines)
 	log.info("Codes défaut effacés (mode 04)")
+
+
+def _first_data_bytes(line: str) -> list[str]:
+	"""Octets de données d'une ligne de réponse, avec ou sans en-tête CAN (« 7E8 01 44 » → ["44"])."""
+	tokens = line.upper().split()
+	if len(tokens) >= 3 and len(tokens[0]) == 3:
+		return tokens[2:]
+	return tokens
+
+
+def clear_accepted(lines: list[str]) -> bool:
+	"""Vrai si une ligne est la réponse positive au mode 04 (premier octet de données 0x44)."""
+	return any(_first_data_bytes(line)[:1] == ["44"] for line in lines)
+
+
+def clear_refused(lines: list[str]) -> bool:
+	"""Vrai si le calculateur a répondu négativement au mode 04 (7F 04 xx)."""
+	return any(_first_data_bytes(line)[:2] == ["7F", "04"] for line in lines)
+
+
+def clear_during_engine_stop(
+	link: ElmLink,
+	should_stop: Callable[[], bool] | None = None,
+	on_attempt: Callable[[int, str], None] | None = None,
+	window_s: float = 60.0,
+	silent_limit: int = 3,
+) -> int:
+	"""Répète la demande d'effacement pendant que l'utilisateur coupe le moteur.
+
+	Pour les véhicules sans clé dont le calculateur refuse l'effacement moteur tournant (7F 04 22) et n'est plus
+	joignable une à deux secondes après l'arrêt : tant que le moteur tourne, chaque demande est refusée aussitôt ;
+	la première qui tombe pendant la coupure est acceptée. Le délai de réponse de l'ELM327 est porté au maximum
+	(ATST FF) pour laisser au calculateur le temps de confirmer. Retourne le nombre de demandes envoyées.
+	"""
+	link.send_raw("ATSTFF", check=False)
+	attempts = 0
+	answered = False
+	silent = 0
+	deadline = time.monotonic() + window_s
+	try:
+		while time.monotonic() < deadline:
+			if should_stop is not None and should_stop():
+				raise ObdError(ErrorKind.CANCELLED)
+			attempts += 1
+			try:
+				lines = link.send_raw("04", check=False, timeout=3.0)
+			except ObdError as exc:
+				if exc.is_link_lost:
+					raise
+				lines = []
+			if clear_accepted(lines):
+				log.info("Codes défaut effacés pendant la coupure du moteur (demande n° %d)", attempts)
+				return attempts
+			if clear_refused(lines):
+				answered = True
+				silent = 0
+				state = "refusé (moteur tournant)"
+			else:
+				silent += 1
+				state = "pas de réponse"
+				if answered and silent >= silent_limit:
+					raise ObdError(
+						ErrorKind.UNABLE_TO_CONNECT,
+						"Le calculateur s'est éteint avant d'accepter l'effacement. Réessayez en coupant le moteur "
+						"franchement (un appui sur START/STOP).",
+					)
+			if on_attempt is not None:
+				on_attempt(attempts, state)
+			time.sleep(0.05)
+		raise ObdError(ErrorKind.TIMEOUT, "Le moteur n'a pas été coupé dans le délai imparti.")
+	finally:
+		try:
+			link.send_raw("ATST32", check=False)
+		except ObdError as exc:
+			log.debug("Rétablissement du délai ELM327 impossible : %s", exc.user_message)
 
 
 @dataclass

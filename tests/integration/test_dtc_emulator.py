@@ -66,3 +66,31 @@ def test_readiness_tests_and_vehicle_info(faulty_link: tuple[ElmLink, DemoEmulat
 	dtc.clear_dtcs(link)
 	cleared = readiness.read_readiness(link, 0x01)
 	assert cleared is not None and len(cleared.incomplete_non_continuous) == 4
+
+
+def test_clear_during_engine_stop(faulty_link: tuple[ElmLink, DemoEmulator]) -> None:
+	"""Véhicule sans clé : refus moteur tournant, effacement accepté dès la coupure du moteur."""
+	import threading
+	import time
+
+	from obdtool.core.errors import ErrorKind, ObdError
+
+	link, emu = faulty_link
+	emu.refuse_clear_while_running = True
+	with pytest.raises(ObdError) as err:
+		dtc.clear_dtcs(link)
+	assert "0x22" in err.value.user_message
+	states: list[str] = []
+	threading.Timer(0.8, lambda: setattr(emu, "engine_running", False)).start()
+	start = time.monotonic()
+	attempts = dtc.clear_during_engine_stop(link, on_attempt=lambda n, state: states.append(state), window_s=10)
+	assert attempts > 1 and time.monotonic() - start >= 0.7
+	assert set(states) == {"refusé (moteur tournant)"}
+	assert dtc.read_dtcs(link, dtc.DtcKind.STORED) == []
+	assert link.send_raw("ATI")  # délai ELM327 rétabli, liaison saine
+	stop = threading.Event()
+	threading.Timer(0.3, stop.set).start()
+	emu.engine_running = True
+	with pytest.raises(ObdError) as cancelled:
+		dtc.clear_during_engine_stop(link, should_stop=stop.is_set, window_s=10)
+	assert cancelled.value.kind == ErrorKind.CANCELLED
