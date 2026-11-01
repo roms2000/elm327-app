@@ -67,3 +67,24 @@ def test_live_page_receives_values(qtbot: QtBot) -> None:
 		assert "RPM" in acq.live_selection()
 	finally:
 		window.shutdown()
+
+
+def test_dtc_page_reads_demo_faults(qtbot: QtBot) -> None:
+	from obdtool.core.service import LinkState
+
+	settings = Settings()
+	settings.connection.demo_scenario = "faults"
+	window = MainWindow(AppContext(settings))
+	qtbot.addWidget(window)
+	try:
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		page = window.pages["dtc"]
+		page.read_codes()
+		qtbot.waitUntil(lambda: page.codes.rowCount() == 3, timeout=10000)
+		assert page.codes.item(0, 0).text() == "P0171"
+		assert "ALLUMÉ" in page.mil.text()
+		assert page.freeze.rowCount() > 5
+		assert page.history_table.rowCount() >= 1
+	finally:
+		window.shutdown()

@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from obdtool.core import transport
 from obdtool.core.adapter_info import AdapterInfo, VehicleState, assess_voltage
-from obdtool.core.emulator import DEFAULT_SCENARIO, emulator_available
+from obdtool.core.emulator import DEFAULT_SCENARIO, SCENARIO_LABELS, emulator_available
 from obdtool.core.errors import ObdError
 from obdtool.core.protocols import PROTOCOLS
 from obdtool.core.service import LinkState, StateEvent
@@ -231,8 +231,10 @@ class ConnectionPage(BasePage):
 		box = QGroupBox("Mode démo")
 		form = QFormLayout(box)
 		self.scenario = QComboBox()
-		self.scenario.addItem("Véhicule en marche (car)", "car")
+		for key, label in SCENARIO_LABELS.items():
+			self.scenario.addItem(label, key)
 		self.scenario.setCurrentIndex(max(self.scenario.findData(scenario or DEFAULT_SCENARIO), 0))
+		self.scenario.currentIndexChanged.connect(self._scenario_changed)
 		form.addRow("Scénario :", self.scenario)
 		text = (
 			"Utilise ELM327-emulator : toute l'application fonctionne sans voiture, avec des valeurs simulées."
@@ -280,6 +282,16 @@ class ConnectionPage(BasePage):
 		else:
 			advice = html.escape(access.advice).replace("\n", "<br>")
 			self.access_label.setText(f"<span style='color:{theme.COLOR_ERROR}'>✖</span> {advice}")
+
+	def _scenario_changed(self) -> None:
+		"""Change le scénario de l'émulateur en cours d'exécution (mode démo)."""
+		scenario = str(self.scenario.currentData())
+		self.ctx.settings.connection.demo_scenario = scenario
+		self.ctx.save_settings()
+		emulator = self.ctx.service.emulator
+		if emulator is not None and emulator.running:
+			self.ctx.service.submit(lambda _link: emulator.set_scenario(scenario), "scénario démo", needs_link=False)
+			self.ctx.notify(f"Scénario démo : {SCENARIO_LABELS.get(scenario, scenario)}")
 
 	def _kind(self) -> str:
 		button = self.kind_group.checkedButton()

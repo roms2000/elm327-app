@@ -26,6 +26,7 @@ from obdtool.ui.context import AppContext
 from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
 from obdtool.ui.pages.base import BasePage, PlaceholderPage
 from obdtool.ui.pages.connection_page import ConnectionPage
+from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
 from obdtool.ui.pages.settings_page import SettingsPage
 from obdtool.ui.status_bar import AppStatusBar
@@ -90,6 +91,8 @@ class MainWindow(QMainWindow):
 			return ConnectionPage(self.ctx)
 		if key == "live":
 			return LivePage(self.ctx, self.acquisition)
+		if key == "dtc":
+			return DtcPage(self.ctx)
 		return PlaceholderPage(title)
 
 	def add_page(self, key: str, title: str, page: BasePage) -> None:

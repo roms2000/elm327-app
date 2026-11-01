@@ -1,0 +1,4 @@
+{
+	"_comment": "Descriptions constructeur (codes P1xxx, B, C, U1xxx). Chaque entrée : {\"description\": ..., \"verified\": true|false, \"source\": ...}. Les entrées non vérifiées sont affichées avec la mention « non vérifié ». Vos propres ajouts vont dans ~/.config/obdtool/dtc_custom.json (même format, au premier niveau ou par marque).",
+	"renault": {}
+}
