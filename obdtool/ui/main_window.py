@@ -1,0 +1,155 @@
+"""Fenêtre principale : navigation latérale et pages."""
+
+from __future__ import annotations
+
+import logging
+
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtWidgets import (
+	QApplication,
+	QHBoxLayout,
+	QListWidget,
+	QListWidgetItem,
+	QMainWindow,
+	QMessageBox,
+	QStackedWidget,
+	QWidget,
+)
+
+from obdtool import APP_DISPLAY_NAME, __version__
+from obdtool.ui import theme
+from obdtool.ui.context import AppContext
+from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
+from obdtool.ui.pages.base import BasePage, PlaceholderPage
+from obdtool.ui.pages.settings_page import SettingsPage
+
+log = logging.getLogger(__name__)
+
+PAGE_TITLES = [
+	("connection", "Connexion"),
+	("dashboard", "Tableau de bord"),
+	("live", "Valeurs"),
+	("charts", "Graphiques"),
+	("dtc", "Défauts"),
+	("monitors", "Moniteurs"),
+	("tests", "Tests embarqués"),
+	("vehicle", "Infos véhicule"),
+	("performance", "Performances"),
+	("sessions", "Sessions"),
+	("console", "Console"),
+	("settings", "Paramètres"),
+]
+
+
+class MainWindow(QMainWindow):
+	"""Fenêtre principale de l'application."""
+
+	def __init__(self, ctx: AppContext) -> None:
+		super().__init__()
+		self.ctx = ctx
+		self.setWindowTitle(f"{APP_DISPLAY_NAME} — diagnostic OBD-II")
+		self.resize(1280, 800)
+		self.pages: dict[str, BasePage] = {}
+
+		central = QWidget()
+		layout = QHBoxLayout(central)
+		layout.setContentsMargins(0, 0, 0, 0)
+		layout.setSpacing(0)
+		self.nav = QListWidget()
+		self.nav.setObjectName("navigation")
+		self.nav.setFixedWidth(190)
+		self.nav.setIconSize(QSize(18, 18))
+		self.stack = QStackedWidget()
+		layout.addWidget(self.nav)
+		layout.addWidget(self.stack, 1)
+		self.setCentralWidget(central)
+
+		for key, title in PAGE_TITLES:
+			self.add_page(key, title, self._create_page(key, title))
+		self.nav.currentRowChanged.connect(self._switch_page)
+		self.nav.setCurrentRow(0)
+		self._build_menu()
+		ctx.theme_changed.connect(self._apply_theme)
+
+	def _create_page(self, key: str, title: str) -> BasePage:
+		if key == "settings":
+			return SettingsPage(self.ctx)
+		return PlaceholderPage(title)
+
+	def add_page(self, key: str, title: str, page: BasePage) -> None:
+		"""Ajoute une page à la navigation."""
+		self.pages[key] = page
+		self.stack.addWidget(page)
+		item = QListWidgetItem(title)
+		item.setData(Qt.ItemDataRole.UserRole, key)
+		self.nav.addItem(item)
+
+	def show_page(self, key: str) -> None:
+		"""Affiche la page identifiée par `key`."""
+		for row in range(self.nav.count()):
+			if self.nav.item(row).data(Qt.ItemDataRole.UserRole) == key:
+				self.nav.setCurrentRow(row)
+				return
+
+	def _switch_page(self, row: int) -> None:
+		previous = self.stack.currentWidget()
+		if isinstance(previous, BasePage):
+			previous.page_hidden()
+		self.stack.setCurrentIndex(row)
+		current = self.stack.currentWidget()
+		if isinstance(current, BasePage):
+			current.page_shown()
+
+	def _build_menu(self) -> None:
+		bar = self.menuBar()
+		file_menu = bar.addMenu("&Fichier")
+		quit_action = QAction("&Quitter", self)
+		quit_action.setShortcut(QKeySequence.StandardKey.Quit)
+		quit_action.triggered.connect(self.close)
+		file_menu.addAction(quit_action)
+
+		view_menu = bar.addMenu("&Affichage")
+		full = QAction("Plein écran", self)
+		full.setShortcut(QKeySequence("F11"))
+		full.triggered.connect(self.toggle_fullscreen)
+		view_menu.addAction(full)
+
+		help_menu = bar.addMenu("&Aide")
+		logs = QAction("Journaux…", self)
+		logs.triggered.connect(lambda: LogViewerDialog(self).exec())
+		help_menu.addAction(logs)
+		folder = QAction("Ouvrir le dossier des journaux", self)
+		folder.triggered.connect(open_log_folder)
+		help_menu.addAction(folder)
+		help_menu.addSeparator()
+		about = QAction("À propos", self)
+		about.triggered.connect(self._about)
+		help_menu.addAction(about)
+
+	def toggle_fullscreen(self) -> None:
+		"""Bascule le mode plein écran."""
+		if self.isFullScreen():
+			self.showNormal()
+		else:
+			self.showFullScreen()
+
+	def _apply_theme(self, name: str) -> None:
+		app = QApplication.instance()
+		if isinstance(app, QApplication):
+			theme.apply_theme(app, name)
+
+	def _about(self) -> None:
+		QMessageBox.about(
+			self,
+			f"À propos de {APP_DISPLAY_NAME}",
+			f"<b>{APP_DISPLAY_NAME} {__version__}</b><br>"
+			"Diagnostic OBD-II générique pour adaptateurs ELM327.<br><br>"
+			"Licence GPL-3.0-or-later. Utilise python-OBD, PySide6 et pyqtgraph.<br>"
+			"<i>Ne manipulez pas l'application en conduisant.</i>",
+		)
+
+	def closeEvent(self, event: QCloseEvent) -> None:
+		self.ctx.save_settings()
+		log.info("Fermeture de la fenêtre principale")
+		super().closeEvent(event)
