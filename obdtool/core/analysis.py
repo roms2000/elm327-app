@@ -59,6 +59,15 @@ def analyse_lambda(
 	if result.duration_s < 10:
 		result.verdicts.append("Analyse sur moins de 10 s : laissez tourner le moteur chaud un peu plus longtemps.")
 		return result
+	coolant = store.get("COOLANT_TEMP")
+	if coolant is not None and len(coolant) and coolant.value_at(coolant.last_time or 0.0, max_gap=1e9) is not None:
+		temperature = coolant.value_at(coolant.last_time or 0.0, max_gap=1e9) or 0.0
+		if temperature < 70:
+			result.verdicts.append(
+				f"Moteur froid ({temperature:.0f} °C) : régulation en boucle ouverte, analyse non significative. "
+				"Recommencez moteur chaud (plus de 80 °C)."
+			)
+			return result
 	result.upstream_min, result.upstream_max = float(v.min()), float(v.max())
 	result.upstream_hz = _switches(v) / 2 / result.duration_s
 	downstream = store.get(down)

@@ -51,3 +51,10 @@ def test_battery_verdicts() -> None:
 	text = " ".join(check.verdicts())
 	assert "bien chargée" in text and "batterie faible" in text and "charge insuffisante" in text
 	assert BatteryCheck().verdicts() == []
+
+
+def test_lambda_cold_engine_not_significant() -> None:
+	store = _store(("O2_B1S1", _sine(1.0, 0.38, 0.45)), ("COOLANT_TEMP", [(i, 35.0) for i in range(30)]))
+	result = analyse_lambda(store)
+	assert result.upstream_hz is None
+	assert "Moteur froid" in result.verdicts[0]
