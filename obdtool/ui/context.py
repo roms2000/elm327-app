@@ -35,4 +35,5 @@ class AppContext(QObject):
 
 	def shutdown(self) -> None:
 		"""Arrête proprement le service de diagnostic."""
+		self.bridge.detach()
 		self.service.shutdown()

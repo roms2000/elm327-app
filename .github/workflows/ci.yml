@@ -32,5 +32,8 @@ jobs:
         run: |
           ruff format --check .
           ruff check .
-      - name: Tests
-        run: pytest -v --durations=10
+      - name: Tests (cœur et intégration)
+        run: pytest -v --durations=10 tests/unit tests/integration
+      - name: Tests (interface)
+        # -s : les messages Qt restent visibles si le processus s'arrête brutalement.
+        run: pytest -v -s tests/ui

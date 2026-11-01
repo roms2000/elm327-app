@@ -133,6 +133,11 @@ class DiagnosticService:
 		"""Ajoute un abonné aux événements (appelé depuis le thread de travail)."""
 		self._listeners.append(listener)
 
+	def unsubscribe(self, listener: Callable[[Event], None]) -> None:
+		"""Retire un abonné (sans erreur s'il n'était pas abonné)."""
+		if listener in self._listeners:
+			self._listeners.remove(listener)
+
 	def _emit(self, event: Event) -> None:
 		for listener in list(self._listeners):
 			try:

@@ -33,11 +33,20 @@ class ServiceBridge(QObject):
 	def __init__(self, service: DiagnosticService, parent: QObject | None = None) -> None:
 		super().__init__(parent)
 		self.service = service
+		self._alive = True
 		self._finished.connect(self._dispatch, Qt.ConnectionType.QueuedConnection)
 		service.subscribe(self._on_event)
+		self.destroyed.connect(lambda *_: self.detach())
+
+	def detach(self) -> None:
+		"""Cesse de relayer les événements (avant destruction de l'interface)."""
+		self._alive = False
+		self.service.unsubscribe(self._on_event)
 
 	def _on_event(self, event: Event) -> None:
 		# Appelé dans le thread de travail : les signaux sont mis en file vers le thread de l'interface.
+		if not self._alive:
+			return
 		if isinstance(event, StateEvent):
 			self.state_changed.emit(event)
 		elif isinstance(event, ErrorEvent):
@@ -56,7 +65,7 @@ class ServiceBridge(QObject):
 		on_error: Callable[[ObdError], None] | None = None,
 	) -> Future:
 		"""Appelle `on_done(résultat)` ou `on_error(erreur)` dans le thread de l'interface à la fin de la tâche."""
-		future.add_done_callback(lambda f: self._finished.emit(f, on_done, on_error))
+		future.add_done_callback(lambda f: self._alive and self._finished.emit(f, on_done, on_error))
 		return future
 
 	@Slot(object, object, object)
