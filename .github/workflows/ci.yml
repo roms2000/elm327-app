@@ -9,6 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     env:
@@ -24,7 +25,8 @@ jobs:
         # ELM327-emulator (sources uniquement) se construit avec pkg_resources, absent de setuptools >= 81.
         run: |
           pip install "setuptools<81" wheel
-          pip install --no-build-isolation ELM327-emulator
+          # Son setup.py télécharge le README sur GitHub : quelques tentatives en cas d'erreur réseau.
+          for i in 1 2 3; do pip install --no-build-isolation ELM327-emulator && break; sleep 10; done
           pip install -e ".[dev]"
       - name: Ruff
         run: |
