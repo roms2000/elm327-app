@@ -114,3 +114,21 @@ def test_full_report_sections() -> None:
 	page = to_html(report)
 	assert "Moniteurs de préparation" in page and "OUI" in page
 	assert "Catalyseur banc 1" in page and "312J6" in page and "Essence" in page
+
+
+def test_clear_retries_with_longer_timeout() -> None:
+	from obdtool.core.errors import ErrorKind, ObdError
+
+	class Link:
+		def __init__(self) -> None:
+			self.sent: list[str] = []
+
+		def send_raw(self, command: str, check: bool = True, timeout: float | None = None) -> list[str]:
+			self.sent.append(command)
+			if command == "04" and self.sent.count("04") == 1:
+				raise ObdError(ErrorKind.NO_DATA)
+			return ["7E8 01 44"] if command == "04" else ["OK"]
+
+	link = Link()
+	dtc.clear_dtcs(link)  # type: ignore[arg-type]
+	assert link.sent == ["04", "ATSTFF", "04", "ATST32"]

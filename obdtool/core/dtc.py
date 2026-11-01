@@ -225,8 +225,22 @@ def read_mil_status(link: ElmLink) -> MilStatus | None:
 
 
 def clear_dtcs(link: ElmLink) -> None:
-	"""Efface les codes défaut et les données associées (mode 04)."""
-	lines = link.send_raw("04", timeout=10.0)
+	"""Efface les codes défaut et les données associées (mode 04).
+
+	Certains calculateurs mettent plus que le délai par défaut de l'ELM327 (≈ 200 ms) à confirmer : sans réponse,
+	une seconde tentative est faite avec le délai maximal (ATST FF, ≈ 1 s).
+	"""
+	try:
+		lines = link.send_raw("04", timeout=10.0)
+	except ObdError as exc:
+		if exc.kind != ErrorKind.NO_DATA:
+			raise
+		log.info("Pas de réponse à l'effacement, nouvel essai avec un délai ELM327 allongé")
+		link.send_raw("ATSTFF", check=False)
+		try:
+			lines = link.send_raw("04", timeout=10.0)
+		finally:
+			link.send_raw("ATST32", check=False)
 	if not any("44" in line.replace(" ", "")[:8] for line in lines):
 		log.warning("Réponse inattendue à l'effacement : %s", lines)
 		raise ObdError(
