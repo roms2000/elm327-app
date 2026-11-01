@@ -62,7 +62,7 @@ def to_text(report: DtcReport) -> str:
 	for kind in DtcKind:
 		lines.append("")
 		entries = report.entries.get(kind)
-		title = f"Codes {kind.label.lower()}s (mode {kind.mode})"
+		title = f"Codes {kind.plural} (mode {kind.mode})"
 		lines.append(title)
 		lines.append("-" * len(title))
 		if entries is None:
@@ -127,7 +127,7 @@ def to_html(report: DtcReport) -> str:
 					f"<tr><td class='code'>{esc(entry.code)}</td><td>{esc(entry.description.display)}{badge}</td></tr>"
 				)
 			body = "<table class='codes'>" + "".join(items) + "</table>"
-		sections.append(f"<h2>Codes {esc(kind.label.lower())}s <small>(mode {kind.mode})</small></h2>{body}")
+		sections.append(f"<h2>Codes {esc(kind.plural)} <small>(mode {kind.mode})</small></h2>{body}")
 	freeze = report.freeze
 	if freeze is None:
 		freeze_html = "<p><i>Non supporté ou non lu.</i></p>"

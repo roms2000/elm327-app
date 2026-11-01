@@ -308,7 +308,7 @@ class DtcPage(BasePage):
 		for kind in dtc.DtcKind:
 			entries = report.entries.get(kind)
 			if entries is None:
-				notes.append(f"mode {kind.mode} ({kind.label.lower()}s) non supporté par le calculateur")
+				notes.append(f"mode {kind.mode} (codes {kind.plural}) non supporté par le calculateur")
 				continue
 			for entry in entries:
 				row = self.codes.rowCount()

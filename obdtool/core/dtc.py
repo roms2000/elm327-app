@@ -35,6 +35,11 @@ class DtcKind(Enum):
 	def label(self) -> str:
 		return self.value[1]
 
+	@property
+	def plural(self) -> str:
+		"""Qualificatif au pluriel (« mémorisés », « en attente », « permanents »)."""
+		return {"03": "mémorisés", "07": "en attente", "0A": "permanents"}[self.mode]
+
 
 _SYSTEMS = {"P": "Groupe motopropulseur", "C": "Châssis", "B": "Carrosserie", "U": "Réseau de communication"}
 _P0_SUBSYSTEMS = {
