@@ -100,3 +100,23 @@ def test_port_access_denied(tmp_path: Path) -> None:
 
 def test_serial_group_name() -> None:
 	assert transport.serial_group_name() in ("dialout", "uucp", "tty")
+
+
+def test_port_users_detects_other_process(tmp_path: Path) -> None:
+	import subprocess
+	import sys
+	import time
+
+	fake = tmp_path / "ttyBUSY"
+	fake.write_text("")
+	holder = subprocess.Popen([sys.executable, "-c", f"f = open({str(fake)!r}); import time; time.sleep(30)"])
+	try:
+		deadline = time.monotonic() + 5
+		while time.monotonic() < deadline and not transport.port_users(str(fake)):
+			time.sleep(0.05)
+		users = transport.port_users(str(fake))
+		assert [pid for pid, _ in users] == [holder.pid]
+	finally:
+		holder.kill()
+		holder.wait()
+	assert transport.port_users(str(fake)) == []

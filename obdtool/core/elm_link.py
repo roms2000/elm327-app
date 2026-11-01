@@ -209,8 +209,15 @@ class ElmLink:
 		last_error = ""
 		for attempt in range(1, attempts + 1):
 			log.info("Connexion à %s (tentative %d/%d)", config.url, attempt, attempts)
-			with self._lock:
-				elm = _Elm327(config.url, baudrate, config.protocol, config.timeout_s)
+			try:
+				with self._lock:
+					elm = _Elm327(config.url, baudrate, config.protocol, config.timeout_s)
+			except (serial.SerialException, OSError) as exc:
+				# python-OBD ne capture pas toutes les erreurs série (détection du débit notamment).
+				last_error = str(exc)
+				log.warning("Tentative %d échouée : %s", attempt, exc)
+				time.sleep(0.5)
+				continue
 			if elm.status() != OBDStatus.NOT_CONNECTED:
 				self._elm = elm
 				break
@@ -241,6 +248,13 @@ class ElmLink:
 				raise ObdError(ErrorKind.PORT_ERROR, access.advice)
 			if not access.ok:
 				raise ObdError(ErrorKind.PERMISSION, access.advice)
+			users = transport.port_users(url)
+			if users:
+				names = ", ".join(f"{name} (PID {pid})" for pid, name in users)
+				raise ObdError(
+					ErrorKind.PORT_ERROR,
+					f"Le port {url} est déjà utilisé par : {names}. Fermez ce programme (ou déconnectez-le) puis réessayez.",
+				)
 
 	def close(self) -> None:
 		"""Ferme la liaison (sans erreur si déjà fermée)."""

@@ -172,3 +172,25 @@ def _group_active(group: str) -> bool:
 	except KeyError:
 		return False
 	return gid in os.getgroups() or gid == os.getgid()
+
+
+def port_users(device: str) -> list[tuple[int, str]]:
+	"""Processus (autres que celui-ci) qui ont ouvert le port, d'après /proc : [(pid, commande)]."""
+	try:
+		target = os.path.realpath(device)
+	except OSError:
+		return []
+	users = []
+	own = os.getpid()
+	for entry in Path("/proc").iterdir():
+		if not entry.name.isdigit() or int(entry.name) == own:
+			continue
+		try:
+			for fd in (entry / "fd").iterdir():
+				if os.path.realpath(fd) == target:
+					cmdline = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+					users.append((int(entry.name), cmdline or entry.name))
+					break
+		except OSError:
+			continue
+	return users
