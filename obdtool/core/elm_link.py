@@ -323,7 +323,16 @@ class ElmLink:
 		return value
 
 	# --------------------------------------------------------------- envoi
-	def send_raw(self, command: str, check: bool = True, timeout: float | None = None) -> list[str]:
+	def restore_defaults(self) -> bool:
+		"""Rétablit la configuration attendue (après ATZ ou la console) ; True si le véhicule répond."""
+		elm = self._require()
+		with self._lock:
+			for command in (b"ATE0", b"ATL0", b"ATS1", b"ATH1", b"ATCAF1", b"ATAR", b"ATAT1"):
+				elm.raw(command, timeout=2.0)
+			self._check_alive()
+		return self.retry_vehicle()
+
+	def send_raw(self, command: str, check: bool = True, timeout: float | None = None, clean: bool = True) -> list[str]:
 		"""Envoie une commande AT ou hexadécimale et retourne les lignes de réponse.
 
 		Avec `check`, les réponses d'erreur (`NO DATA`, `CAN ERROR`…) lèvent une `ObdError`.
@@ -351,7 +360,7 @@ class ElmLink:
 			kind = classify(lines)
 			if kind is not None:
 				raise ObdError(kind, raw=lines)
-		return clean_lines(lines)
+		return clean_lines(lines) if clean else lines
 
 	def query(self, command: OBDCommand) -> OBDResponse:
 		"""Envoie une commande python-OBD et retourne la réponse décodée.

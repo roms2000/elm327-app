@@ -29,6 +29,7 @@ from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
 from obdtool.ui.pages.base import BasePage, PlaceholderPage
 from obdtool.ui.pages.charts_page import ChartsPage
 from obdtool.ui.pages.connection_page import ConnectionPage
+from obdtool.ui.pages.console_page import ConsolePage
 from obdtool.ui.pages.dashboard_page import DashboardPage
 from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
@@ -117,6 +118,8 @@ class MainWindow(QMainWindow):
 			return DtcPage(self.ctx)
 		if key == "charts":
 			return ChartsPage(self.ctx, self.acquisition)
+		if key == "console":
+			return ConsolePage(self.ctx, self.acquisition)
 		if key == "performance":
 			return PerformancePage(self.ctx, self.acquisition)
 		if key == "monitors":

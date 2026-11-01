@@ -222,3 +222,34 @@ def test_performance_page_and_derived_values(qtbot: QtBot) -> None:
 		assert acq.exclusive is None
 	finally:
 		window.shutdown()
+
+
+def test_console_guard_and_commands(qtbot: QtBot, no_modal_dialogs: list) -> None:
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.show()
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		window.show_page("console")
+		page = window.pages["console"]
+		assert not window.acquisition.running  # acquisition suspendue par défaut
+		page.send("ATI")
+		qtbot.waitUntil(lambda: "ELM327" in page.output.toPlainText(), timeout=5000)
+		page.send("2EF19031")
+		assert "bloquée" in page.output.toPlainText()
+		page.send("04")  # confirmation refusée par la boîte simulée (réponse « Non »)
+		qtbot.wait(200)
+		page.send("ATZ")
+		qtbot.waitUntil(lambda: "Configuration de l'adaptateur rétablie" in page.output.toPlainText(), timeout=15000)
+		page._toggle_monitor()
+		qtbot.wait(800)
+		page._toggle_monitor()
+		qtbot.waitUntil(lambda: not page._monitoring, timeout=5000)
+		assert page._monitor_count > 0
+		window.show_page("live")
+		assert window.acquisition.running
+	finally:
+		window.shutdown()

@@ -36,4 +36,6 @@ jobs:
         run: pytest -v --durations=10 tests/unit tests/integration
       - name: Tests (interface)
         # -s : les messages Qt restent visibles si le processus s'arrête brutalement.
-        run: pytest -v -s tests/ui
+        run: |
+          pytest -v -s tests/ui/test_refcount.py || true
+          pytest -v -s tests/ui
