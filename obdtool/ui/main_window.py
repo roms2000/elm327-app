@@ -18,11 +18,15 @@ from PySide6.QtWidgets import (
 )
 
 from obdtool import APP_DISPLAY_NAME, __version__
+from obdtool.core import transport
+from obdtool.core.service import ErrorEvent
 from obdtool.ui import theme
 from obdtool.ui.context import AppContext
 from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
 from obdtool.ui.pages.base import BasePage, PlaceholderPage
+from obdtool.ui.pages.connection_page import ConnectionPage
 from obdtool.ui.pages.settings_page import SettingsPage
+from obdtool.ui.status_bar import AppStatusBar
 
 log = logging.getLogger(__name__)
 
@@ -69,12 +73,17 @@ class MainWindow(QMainWindow):
 			self.add_page(key, title, self._create_page(key, title))
 		self.nav.currentRowChanged.connect(self._switch_page)
 		self.nav.setCurrentRow(0)
+		self.status = AppStatusBar(ctx, self)
+		self.setStatusBar(self.status)
 		self._build_menu()
 		ctx.theme_changed.connect(self._apply_theme)
+		ctx.bridge.error.connect(self._on_error)
 
 	def _create_page(self, key: str, title: str) -> BasePage:
 		if key == "settings":
 			return SettingsPage(self.ctx)
+		if key == "connection":
+			return ConnectionPage(self.ctx)
 		return PlaceholderPage(title)
 
 	def add_page(self, key: str, title: str, page: BasePage) -> None:
@@ -149,7 +158,37 @@ class MainWindow(QMainWindow):
 			"<i>Ne manipulez pas l'application en conduisant.</i>",
 		)
 
+	def start_demo(self) -> None:
+		"""Se connecte directement à l'émulateur (option --demo)."""
+		page = self.pages["connection"]
+		assert isinstance(page, ConnectionPage)
+		self.ctx.settings.connection.kind = "demo"
+		for button in page.kind_group.buttons():
+			button.setChecked(button.property("kind") == "demo")
+		page.start_connection()
+
+	def check_serial_access(self) -> None:
+		"""Au démarrage, signale un port série inaccessible et explique comment corriger."""
+		conn = self.ctx.settings.connection
+		if conn.kind != "serial" or not conn.port.startswith("/dev/"):
+			return
+		access = transport.check_port_access(conn.port)
+		if access.exists and not access.ok:
+			log.warning("Port %s inaccessible : %s", conn.port, access.advice)
+			QMessageBox.warning(self, "Droits sur le port série", access.advice)
+
+	def _on_error(self, event: ErrorEvent) -> None:
+		text = event.error.user_message
+		if event.context:
+			text = f"{event.context} : {text}"
+		self.ctx.notify(text, 8000)
+
+	def shutdown(self) -> None:
+		"""Arrête le service de diagnostic."""
+		self.ctx.shutdown()
+
 	def closeEvent(self, event: QCloseEvent) -> None:
 		self.ctx.save_settings()
 		log.info("Fermeture de la fenêtre principale")
+		self.shutdown()
 		super().closeEvent(event)

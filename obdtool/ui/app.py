@@ -104,6 +104,10 @@ def main(argv: list[str] | None = None) -> int:
 		log.info("Avertissement refusé, fermeture")
 		return 0
 	window.show()
+	if args.demo:
+		window.start_demo()
+	else:
+		window.check_serial_access()
 	code = app.exec()
 	log.info("Arrêt de l'application (code %d)", code)
 	return code

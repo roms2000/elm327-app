@@ -68,6 +68,8 @@ def setup_logging(
 		stream = logging.StreamHandler()
 		stream.setFormatter(logging.Formatter("%(levelname)s %(name)s : %(message)s"))
 		stream.setLevel(logging.WARNING)
+		# Les messages de python-OBD restent dans les fichiers ; en console ils feraient doublon avec nos messages.
+		stream.addFilter(lambda record: not record.name.startswith("obd"))
 		root.addHandler(stream)
 	set_level(level)
 	_current_file = log_file
@@ -80,8 +82,13 @@ def set_level(level: str) -> None:
 	"""Change le niveau de journalisation (DEBUG active aussi les trames brutes de python-OBD)."""
 	numeric = getattr(logging, level.upper(), logging.INFO)
 	logging.getLogger().setLevel(numeric)
-	# python-OBD est très bavard : ses messages DEBUG contiennent les échanges bruts.
-	logging.getLogger("obd").setLevel(numeric if numeric <= logging.DEBUG else logging.WARNING)
+	# python-OBD installe son propre affichage console : on le retire, ses messages passent par nos fichiers.
+	obd_logger = logging.getLogger("obd")
+	for handler in list(obd_logger.handlers):
+		obd_logger.removeHandler(handler)
+	obd_logger.propagate = True
+	# Ses messages DEBUG contiennent les échanges bruts avec l'adaptateur.
+	obd_logger.setLevel(numeric if numeric <= logging.DEBUG else logging.WARNING)
 
 
 def list_sessions(directory: Path | None = None) -> list[LogSession]:
