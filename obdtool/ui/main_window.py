@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 	QMainWindow,
 	QMessageBox,
 	QStackedWidget,
+	QVBoxLayout,
 	QWidget,
 )
 
@@ -22,11 +23,13 @@ from obdtool.core import transport
 from obdtool.core.service import ErrorEvent
 from obdtool.ui import theme
 from obdtool.ui.acquisition import AcquisitionController
+from obdtool.ui.alert_control import AlertBanner, AlertController
 from obdtool.ui.context import AppContext
 from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
 from obdtool.ui.pages.base import BasePage, PlaceholderPage
 from obdtool.ui.pages.charts_page import ChartsPage
 from obdtool.ui.pages.connection_page import ConnectionPage
+from obdtool.ui.pages.dashboard_page import DashboardPage
 from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
 from obdtool.ui.pages.sessions_page import SessionsPage
@@ -63,11 +66,18 @@ class MainWindow(QMainWindow):
 		self.pages: dict[str, BasePage] = {}
 		self.acquisition = AcquisitionController(ctx, self)
 		self.sessions = SessionController(ctx, self.acquisition, self)
+		self.alerts = AlertController(ctx, self.acquisition, self)
 
 		central = QWidget()
-		layout = QHBoxLayout(central)
+		outer = QVBoxLayout(central)
+		outer.setContentsMargins(0, 0, 0, 0)
+		outer.setSpacing(0)
+		self.banner = AlertBanner(self.alerts)
+		outer.addWidget(self.banner)
+		layout = QHBoxLayout()
 		layout.setContentsMargins(0, 0, 0, 0)
 		layout.setSpacing(0)
+		outer.addLayout(layout, 1)
 		self.nav = QListWidget()
 		self.nav.setObjectName("navigation")
 		self.nav.setFixedWidth(190)
@@ -92,7 +102,9 @@ class MainWindow(QMainWindow):
 
 	def _create_page(self, key: str, title: str) -> BasePage:
 		if key == "settings":
-			return SettingsPage(self.ctx)
+			return SettingsPage(self.ctx, self.alerts)
+		if key == "dashboard":
+			return DashboardPage(self.ctx, self.acquisition)
 		if key == "connection":
 			return ConnectionPage(self.ctx)
 		if key == "live":

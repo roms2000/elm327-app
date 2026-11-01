@@ -143,3 +143,35 @@ def test_record_then_replay(qtbot: QtBot) -> None:
 		assert not window.acquisition.replaying
 	finally:
 		window.shutdown()
+
+
+def test_dashboard_and_alerts(qtbot: QtBot) -> None:
+	import time as _time
+
+	from obdtool.core.samples import Sample, SampleBatch
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.show()
+		window.show_page("dashboard")
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		page = window.pages["dashboard"]
+		assert "RPM" in window.acquisition.effective_selection()
+		qtbot.waitUntil(lambda: page.view.gauges[0].value is not None, timeout=10000)
+		page.selector.setCurrentIndex(page.selector.findText("Sondes lambda"))
+		assert page.view.gauges[0].config.key == "O2_B1S1"
+		window.show_page("live")
+		assert "O2_B1S1_TRIM" not in window.acquisition.effective_selection()
+		# Alerte de surchauffe simulée.
+		now = _time.time()
+		window.acquisition.publish(
+			SampleBatch([Sample("COOLANT_TEMP", now, 110.0), Sample("COOLANT_TEMP", now + 4, 111.0)])
+		)
+		assert window.alerts.active()
+		qtbot.waitUntil(lambda: window.banner.isVisible(), timeout=2000)
+		assert "Température" in window.banner.label.text()
+	finally:
+		window.shutdown()

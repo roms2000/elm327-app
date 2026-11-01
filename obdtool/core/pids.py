@@ -161,6 +161,19 @@ _DEFS: list[PidDef] = [
 	_d("ADAPTER_VOLTAGE", -1, "Tension batterie (mesure de l'adaptateur)", _EL, "V", 10, 16, slow=True, source="atrv"),
 ]
 
+# Valeurs calculées à partir des mesures et du profil véhicule (voir core/calc.py).
+_DV = "Valeurs calculées"
+_DEFS += [
+	_d("AIRFLOW_DERIVED", -1, "Débit d'air estimé (speed-density ou MAF)", _DV, "g/s", 0, 150, source="derived"),
+	_d("FUEL_RATE_DERIVED", -1, "Consommation instantanée (horaire)", _DV, "L/h", 0, 30, source="derived"),
+	_d("FUEL_ECONOMY_DERIVED", -1, "Consommation instantanée", _DV, "L/100 km", 0, 30, source="derived"),
+	_d("FUEL_AVG_DERIVED", -1, "Consommation moyenne de la session", _DV, "L/100 km", 0, 20, source="derived"),
+	_d("FUEL_USED_DERIVED", -1, "Carburant consommé (session)", _DV, "L", 0, 50, source="derived"),
+	_d("DISTANCE_DERIVED", -1, "Distance parcourue (session)", _DV, "km", 0, 500, source="derived"),
+	_d("GEAR_DERIVED", -1, "Rapport engagé estimé", _DV, "", 0, 6, source="derived"),
+	_d("POWER_DERIVED", -1, "Puissance estimée (indicative)", _DV, "kW", 0, 120, source="derived"),
+]
+
 # Sondes à bande étroite : tension (python-OBD) et correction carburant associée (octet B).
 for _i, (_bank, _sensor) in enumerate([(b, s) for b in (1, 2) for s in (1, 2, 3, 4)]):
 	_pid = 0x14 + _i

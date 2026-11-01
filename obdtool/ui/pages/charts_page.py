@@ -196,7 +196,7 @@ class ChartsPage(BasePage):
 	# ----------------------------------------------------------- graphiques
 	def _rebuild(self, *_args: object) -> None:
 		"""Reconstruit les graphiques (courbes, disposition ou thème modifiés)."""
-		self.acq.require("charts", self.curves)
+		self._update_requirements()
 		self._save_config()
 		self.curve_list.clear()
 		for index, key in enumerate(self.curves):
@@ -415,8 +415,14 @@ class ChartsPage(BasePage):
 				item.setData([], [])
 
 	# ---------------------------------------------------------- visibilité
+	def _update_requirements(self) -> None:
+		# Les courbes ne sont interrogées que lorsque l'écran est affiché (meilleure fréquence ailleurs).
+		self.acq.require("charts", self.curves if self.isVisible() else [])
+
 	def page_shown(self) -> None:
 		self._timer.start()
+		self.acq.require("charts", self.curves)
 
 	def page_hidden(self) -> None:
 		self._timer.stop()
+		self.acq.require("charts", [])
