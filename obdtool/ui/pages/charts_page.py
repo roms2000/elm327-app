@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import html
 import logging
 from datetime import datetime
@@ -61,6 +62,8 @@ class ChartsPage(BasePage):
 		self._items: dict[str, pg.PlotDataItem] = {}
 		self._views: list[pg.ViewBox] = []
 		self._cursors: list[pg.InfiniteLine] = []
+		self._overlay_sync = None
+		self._overlay_views = False
 
 		toolbar = QHBoxLayout()
 		self.add_combo = QComboBox()
@@ -203,6 +206,7 @@ class ChartsPage(BasePage):
 			item = QListWidgetItem(_swatch(theme.series_color(index)), self._label(key))
 			item.setToolTip(key)
 			self.curve_list.addItem(item)
+		self._teardown()
 		self.graphics.clear()
 		self._plots.clear()
 		self._items.clear()
@@ -220,6 +224,19 @@ class ChartsPage(BasePage):
 			plot.scene().sigMouseClicked.connect(self._scene_clicked)
 			break
 		self._apply_pause_state()
+
+	def _teardown(self) -> None:
+		"""Détache les vues supplémentaires du mode superposé (elles ne font pas partie de la grille)."""
+		if self._overlay_sync is not None and self._plots:
+			with contextlib.suppress(RuntimeError, TypeError):
+				self._plots[0].vb.sigResized.disconnect(self._overlay_sync)
+		self._overlay_sync = None
+		for view in self._views[1:] if self._overlay_views else []:
+			view.setXLink(None)
+			scene = view.scene()
+			if scene is not None:
+				scene.removeItem(view)
+		self._overlay_views = False
 
 	def _new_plot(self, row: int, col: int, date_axis: bool) -> pg.PlotItem:
 		axis = {"bottom": pg.DateAxisItem(orientation="bottom")} if date_axis else {}
@@ -288,6 +305,8 @@ class ChartsPage(BasePage):
 				view.linkedViewChanged(plot.vb, view.XAxis)
 
 		plot.vb.sigResized.connect(sync)
+		self._overlay_sync = sync
+		self._overlay_views = True
 		sync()
 
 	# ------------------------------------------------------------- données

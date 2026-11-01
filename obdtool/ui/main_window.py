@@ -247,7 +247,9 @@ class MainWindow(QMainWindow):
 		self.ctx.notify(text, 8000)
 
 	def shutdown(self) -> None:
-		"""Ferme l'enregistrement en cours et arrête le service de diagnostic."""
+		"""Ferme l'enregistrement en cours, arrête les minuteries des écrans et le service de diagnostic."""
+		for page in self.pages.values():
+			page.page_hidden()
 		self.sessions.shutdown()
 		self.ctx.shutdown()
 
