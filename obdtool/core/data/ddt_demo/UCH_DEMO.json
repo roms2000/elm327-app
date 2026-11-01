@@ -1,0 +1,113 @@
+{
+	"ecuname": "UCH_DEMO (fictif)",
+	"obd": {
+		"protocol": "CAN",
+		"send_id": "745",
+		"recv_id": "765",
+		"funcaddr": "26",
+		"funcname": "UCH"
+	},
+	"endian": "Big",
+	"devices": [],
+	"requests": [
+		{
+			"name": "Identification",
+			"sentbytes": "2180",
+			"replybytes": "6180",
+			"receivebyte_dataitems": {}
+		},
+		{
+			"name": "LC_Configuration habitacle",
+			"sentbytes": "2101",
+			"replybytes": "6101",
+			"receivebyte_dataitems": {
+				"Clignotants impulsionnels (3 clignotements)": {
+					"firstbyte": 3,
+					"bitoffset": 0
+				},
+				"Reverrouillage automatique": {
+					"firstbyte": 3,
+					"bitoffset": 1
+				},
+				"Verrouillage automatique en roulant": {
+					"firstbyte": 3,
+					"bitoffset": 2
+				},
+				"Déverrouillage porte conducteur seule": {
+					"firstbyte": 3,
+					"bitoffset": 3
+				},
+				"Éclairage d'accompagnement": {
+					"firstbyte": 3,
+					"bitoffset": 4
+				},
+				"Fermeture des vitres à la condamnation": {
+					"firstbyte": 4,
+					"bitoffset": 0
+				}
+			}
+		},
+		{
+			"name": "Ecriture configuration habitacle",
+			"sentbytes": "3B01",
+			"replybytes": "7B01",
+			"sendbyte_dataitems": {
+				"Clignotants impulsionnels (3 clignotements)": {
+					"firstbyte": 3
+				}
+			}
+		}
+	],
+	"data": {
+		"Clignotants impulsionnels (3 clignotements)": {
+			"bitscount": 1,
+			"lists": {
+				"0": "Inactif",
+				"1": "Actif"
+			},
+			"description": "Clignotants impulsionnels (3 clignotements) (démo)"
+		},
+		"Reverrouillage automatique": {
+			"bitscount": 1,
+			"lists": {
+				"0": "Inactif",
+				"1": "Actif"
+			},
+			"description": "Reverrouillage automatique (démo)"
+		},
+		"Verrouillage automatique en roulant": {
+			"bitscount": 1,
+			"lists": {
+				"0": "Inactif",
+				"1": "Actif"
+			},
+			"description": "Verrouillage automatique en roulant (démo)"
+		},
+		"Déverrouillage porte conducteur seule": {
+			"bitscount": 1,
+			"lists": {
+				"0": "Inactif",
+				"1": "Actif"
+			},
+			"description": "Déverrouillage porte conducteur seule (démo)"
+		},
+		"Éclairage d'accompagnement": {
+			"bitscount": 2,
+			"lists": {
+				"0": "Inactif",
+				"1": "30 s",
+				"2": "60 s",
+				"3": "90 s"
+			},
+			"description": "Éclairage d'accompagnement (démo)"
+		},
+		"Fermeture des vitres à la condamnation": {
+			"bitscount": 1,
+			"lists": {
+				"0": "Inactif",
+				"1": "Actif"
+			},
+			"description": "Fermeture des vitres à la condamnation (démo)"
+		}
+	}
+}

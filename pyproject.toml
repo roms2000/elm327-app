@@ -45,7 +45,7 @@ obdtool = "obdtool.ui.app:main"
 include = ["obdtool*"]
 
 [tool.setuptools.package-data]
-"obdtool.core" = ["data/*.json"]
+"obdtool.core" = ["data/*.json", "data/ddt_demo/*.json"]
 "obdtool.ui" = ["resources/*"]
 
 [tool.ruff]

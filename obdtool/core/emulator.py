@@ -235,6 +235,8 @@ class DemoEmulator:
 
 			faults_only[f"DEMO_FREEZE_{pid:02X}"] = self._entry(f"02{pid:02X}00", f"Freeze frame PID {pid:02X}", frame)
 
+		ours.update(self._renault_ecus())
+
 		car = self._elm.ObdMessage["car"]
 		self._elm.ObdMessage["car"] = {**ours, **{k: v for k, v in car.items() if k not in ours}}
 		self._elm.ObdMessage[FAULTS_SCENARIO] = {
@@ -242,6 +244,69 @@ class DemoEmulator:
 			**faults_only,
 			**{k: v for k, v in car.items() if k not in ours},
 		}
+
+	def _frames(self, header: str, payload: str) -> str:
+		"""Réponse ISO-TP (trame unique ou première trame + trames consécutives) au format de l'émulateur."""
+		import elm.obd_message as messages
+
+		data = payload.split()
+		if len(data) <= 7:
+			return messages.HD(header) + messages.SZ(f"{len(data):02X}") + messages.DT(" ".join(data))
+		out = messages.HD(header) + messages.SZ("10") + messages.DT(" ".join([f"{len(data):02X}", *data[:6]]))
+		rest, index = data[6:], 1
+		while rest:
+			chunk, rest = rest[:7], rest[7:]
+			out += messages.HD(header) + messages.SZ(f"2{index % 16:X}") + messages.DT(" ".join(chunk))
+			index += 1
+		return out
+
+	def _renault_ecus(self) -> dict[str, dict[str, Any]]:
+		"""UCH et tableau de bord FICTIFS (adressage physique Renault), cohérents avec la base de démonstration."""
+		import elm.obd_message as messages
+
+		# (émission, réception, octets d'identification 2180 après « 61 80 », réponses de lecture)
+		ecus = {
+			"UCH": (
+				"745",
+				"765",
+				"00 00 00 00 00 0C 44 45 4D 00 00 00 00 00 01 23 00 01 00 00 00 00 00 00",
+				{"2101": "61 01 68 01"},
+			),
+			"TDB": (
+				"743",
+				"763",
+				"00 00 00 00 00 08 44 4D 4F 00 00 00 00 00 04 56 00 02 00 00 00 00 00 00",
+				{"2110": "61 10 90 07"},
+			),
+		}
+		entries: dict[str, dict[str, Any]] = {}
+		for name, (tx, rx, ident, reads) in ecus.items():
+			answers = {"10C0": "50 C0", "1081": "50 81", "2180": f"61 80 {ident}", **reads}
+			for request, payload in answers.items():
+
+				def footer(emu: Any, cmd: str, pid: str, uc_val: Any, rx: str = rx, payload: str = payload) -> str:
+					return self._frames(rx, payload)
+
+				entries[f"DEMO_{name}_{request}"] = {
+					"Request": f"^{request}$",
+					"Descr": f"{name} fictif {request}",
+					"Header": tx,
+					"Priority": 1,
+					"ResponseFooter": footer,
+				}
+
+		def reset_cra(emu: Any, cmd: str, pid: str, uc_val: Any) -> str:
+			emu.counters["cmd_cra"] = None  # l'émulateur n'efface pas le filtre de réception sur ATAR
+			return ""
+
+		entries["DEMO_ATAR"] = {
+			"Request": "^ATAR$",
+			"Descr": "ATAR",
+			"Priority": 1,
+			"Response": messages.ELM_R_OK,
+			"ResponseFooter": reset_cra,
+		}
+		return entries
 
 	def scenarios(self) -> list[str]:
 		"""Scénarios disponibles."""

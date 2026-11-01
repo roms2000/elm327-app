@@ -32,6 +32,7 @@ from obdtool.ui.pages.charts_page import ChartsPage
 from obdtool.ui.pages.connection_page import ConnectionPage
 from obdtool.ui.pages.console_page import ConsolePage
 from obdtool.ui.pages.dashboard_page import DashboardPage
+from obdtool.ui.pages.ddt_page import DdtPage
 from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
 from obdtool.ui.pages.monitors_page import MonitorsPage
@@ -54,6 +55,7 @@ PAGE_TITLES = [
 	("monitors", "Moniteurs"),
 	("tests", "Tests embarqués"),
 	("vehicle", "Infos véhicule"),
+	("ddt", "Personnalisation"),
 	("performance", "Performances"),
 	("analysis", "Analyses"),
 	("sessions", "Sessions"),
@@ -120,6 +122,8 @@ class MainWindow(QMainWindow):
 			return DtcPage(self.ctx)
 		if key == "charts":
 			return ChartsPage(self.ctx, self.acquisition)
+		if key == "ddt":
+			return DdtPage(self.ctx, self.acquisition)
 		if key == "analysis":
 			return AnalysisPage(self.ctx, self.acquisition)
 		if key == "console":

@@ -1,0 +1,76 @@
+{
+	"ecuname": "TDB_DEMO (fictif)",
+	"obd": {
+		"protocol": "CAN",
+		"send_id": "743",
+		"recv_id": "763",
+		"funcaddr": "51",
+		"funcname": "Tableau de bord"
+	},
+	"endian": "Big",
+	"devices": [],
+	"requests": [
+		{
+			"name": "Identification",
+			"sentbytes": "2180",
+			"replybytes": "6180",
+			"receivebyte_dataitems": {}
+		},
+		{
+			"name": "LC_Configuration tableau de bord",
+			"sentbytes": "2110",
+			"replybytes": "6110",
+			"receivebyte_dataitems": {
+				"Volume du bip de réserve carburant": {
+					"firstbyte": 3,
+					"bitoffset": 0
+				},
+				"Bip de ceinture de sécurité": {
+					"firstbyte": 3,
+					"bitoffset": 2
+				},
+				"Unité de consommation": {
+					"firstbyte": 3,
+					"bitoffset": 3
+				},
+				"Seuil d'alerte réserve carburant": {
+					"firstbyte": 4
+				}
+			}
+		}
+	],
+	"data": {
+		"Volume du bip de réserve carburant": {
+			"bitscount": 2,
+			"lists": {
+				"0": "Faible",
+				"1": "Moyen",
+				"2": "Fort"
+			},
+			"description": "Volume du bip de réserve carburant (démo)"
+		},
+		"Bip de ceinture de sécurité": {
+			"bitscount": 1,
+			"lists": {
+				"0": "Inactif",
+				"1": "Actif"
+			},
+			"description": "Bip de ceinture de sécurité (démo)"
+		},
+		"Unité de consommation": {
+			"bitscount": 1,
+			"lists": {
+				"0": "L/100 km",
+				"1": "km/L"
+			},
+			"description": "Unité de consommation (démo)"
+		},
+		"Seuil d'alerte réserve carburant": {
+			"bitscount": 8,
+			"scaled": true,
+			"step": 1,
+			"unit": "L",
+			"description": "Seuil d'alerte réserve carburant (démo)"
+		}
+	}
+}

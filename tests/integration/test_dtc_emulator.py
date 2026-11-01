@@ -94,3 +94,33 @@ def test_clear_during_engine_stop(faulty_link: tuple[ElmLink, DemoEmulator]) -> 
 	with pytest.raises(ObdError) as cancelled:
 		dtc.clear_during_engine_stop(link, should_stop=stop.is_set, window_s=10)
 	assert cancelled.value.kind == ErrorKind.CANCELLED
+
+
+def test_renault_read_only_session_on_demo_ecus() -> None:
+	"""UCH et tableau de bord fictifs : identification, lecture, refus d'écriture, retour au mode OBD."""
+	from pathlib import Path
+
+	from obdtool.core.ddt import reader
+	from obdtool.core.ddt.database import DdtDatabase
+	from obdtool.core.ddt.session import RenaultSession
+	from obdtool.core.errors import ErrorKind, ObdError
+
+	emu = DemoEmulator()
+	emu.start()
+	link = ElmLink()
+	link.open(LinkConfig(url=emu.url, timeout_s=3.0))
+	try:
+		db = DdtDatabase(Path(__file__).resolve().parents[2] / "obdtool" / "core" / "data" / "ddt_demo")
+		scans = {s.address: s for s in reader.scan_addresses(link, db, ["26", "51"], "DEMO")}
+		assert scans["26"].status == "identifié" and scans["51"].status == "identifié"
+		readout = reader.read_ecu(link, db, scans["51"], only_config=True)
+		values = {v.name: v.display for v in readout.values}
+		assert values["Volume du bip de réserve carburant"] == "Fort"
+		assert values["Seuil d'alerte réserve carburant"] == "7"
+		with RenaultSession(link, "745", "765") as session, pytest.raises(ObdError) as err:
+			session.request("3B0101")
+		assert err.value.kind == ErrorKind.BLOCKED
+		assert link.car_connected and link.query_bytes("010C")  # configuration OBD rétablie
+	finally:
+		link.close()
+		emu.stop()

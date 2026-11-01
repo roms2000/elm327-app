@@ -341,7 +341,8 @@ class ElmLink:
 		"""Rétablit la configuration attendue (après ATZ ou la console) ; True si le véhicule répond."""
 		elm = self._require()
 		with self._lock:
-			for command in (b"ATE0", b"ATL0", b"ATS1", b"ATH1", b"ATCAF1", b"ATAR", b"ATAT1"):
+			# ATD remet en-tête, filtres et délais par défaut (après une session à adressage physique, par exemple).
+			for command in (b"ATD", b"ATE0", b"ATL0", b"ATS1", b"ATH1", b"ATCAF1", b"ATAR", b"ATAT1"):
 				elm.raw(command, timeout=2.0)
 			self._check_alive()
 		return self.retry_vehicle()

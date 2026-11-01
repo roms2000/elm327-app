@@ -1,0 +1,36 @@
+{
+	"UCH_DEMO.json": {
+		"ecuname": "UCH_DEMO (fictif)",
+		"group": "UCH",
+		"address": "26",
+		"protocol": "CAN",
+		"projects": [
+			"DEMO"
+		],
+		"autoidents": [
+			{
+				"diagnostic_version": "12",
+				"supplier_code": "DEM",
+				"soft_version": "0123",
+				"version": "0001"
+			}
+		]
+	},
+	"TDB_DEMO.json": {
+		"ecuname": "TDB_DEMO (fictif)",
+		"group": "Tableau de bord",
+		"address": "51",
+		"protocol": "CAN",
+		"projects": [
+			"DEMO"
+		],
+		"autoidents": [
+			{
+				"diagnostic_version": "8",
+				"supplier_code": "DMO",
+				"soft_version": "0456",
+				"version": "0002"
+			}
+		]
+	}
+}

@@ -147,6 +147,7 @@ sonde amont qui oscille) et un profil proche du K4M (capteur MAP, pas de débitm
 | **Moniteurs** | Readiness depuis l'effacement et sur le cycle en cours, synthèse « prêt pour le contrôle » |
 | **Tests embarqués** | Mode 06, Mode 05, Mode 08 (désactivé par défaut) |
 | **Infos véhicule** | VIN, CAL ID, CVN, nom du calculateur, compteurs de performance, normes, distances et temps |
+| **Personnalisation** | Lecture seule de la configuration des calculateurs Renault (UCH, tableau de bord…) avec la base DDT4All |
 | **Performances** | Valeurs calculées, chronos 0-50 / 0-100 / 80-120, historique |
 | **Analyses** | Sondes lambda et catalyseur, corrections de richesse, test batterie / charge |
 | **Sessions** | Enregistrement, relecture, renommage, suppression, export |
@@ -229,6 +230,27 @@ continus et non continus, essence et diesel. Synthèse **prêt pour un contrôle
 - **Mode 08** : désactivé par défaut, derrière un avertissement explicite ; seul le test standard d'étanchéité EVAP
   peut être lancé.
 
+### Personnalisation (lecture seule)
+
+Lecture de la configuration des calculateurs Renault hors OBD (UCH, tableau de bord…) : clignotants impulsionnels,
+reverrouillage automatique, éclairage d'accompagnement, bips… selon ce que le calculateur propose.
+
+- **Base de définitions** : il faut le fichier `ecu.zip` de **DDT4All** (base communautaire, non distribuée avec
+  OBDTool). Indiquez-le avec **Choisir…** ; choisissez ensuite le projet véhicule (Clio III : `X85`).
+- **Identifier** : pour chaque calculateur coché (UCH et tableau de bord par défaut), l'application ouvre une
+  session de diagnostic, lit l'identification (`2180` ou `22F1xx`) et retrouve la définition correspondante.
+- **Lire** : les requêtes de lecture de configuration (ou toutes les lectures) sont envoyées et décodées ; les
+  personnalisations courantes sont mises en évidence, un filtre permet de chercher (« clignot », « bip »…).
+- **Sauvegarder (CSV)** : garde une trace de la configuration actuelle.
+- **Lecture seule par construction** : seules les sessions de diagnostic (`10 C0/81/01/03`) et les lectures
+  (`21`, `22`, `17`, `18`, `19`, `1A`) peuvent partir ; toute écriture est refusée avant l'envoi. À la fin,
+  le calculateur repasse en session par défaut et l'adaptateur retrouve sa configuration OBD (`ATD`…).
+- **Mode démo** : une base **fictive** (UCH et tableau de bord inventés) et les calculateurs simulés correspondants
+  permettent d'essayer l'écran sans voiture.
+
+L'**écriture** de ces réglages n'est pas encore proposée : elle viendra éventuellement après validation de la
+lecture sur le véhicule, avec sauvegarde et restauration.
+
 ### Performances et valeurs calculées
 
 À partir du **profil véhicule** (Fichier → Profil véhicule…) :
@@ -303,10 +325,10 @@ OBD est isolée du bus principal par une passerelle : peu ou pas de trames sont 
   émission de signal et finit par faire planter l'application. Sous Python 3.11, l'installation retient donc
   PySide6 6.11 ou antérieur ; l'application compense aussi le défaut si la version fautive est présente.
 
-- **OBD-II générique uniquement.** Un ELM327 ne dialogue qu'avec les fonctions antipollution normalisées du
-  calculateur moteur. Les calculateurs Renault spécifiques (ABS, airbag, UCH, direction assistée, climatisation,
-  tableau de bord…) et les paramètres constructeur nécessitent un outil comme **DDT4All** (avec un adaptateur
-  compatible) ou l'outil constructeur.
+- **OBD-II générique, plus lecture Renault.** Les fonctions de diagnostic portent sur l'OBD-II normalisé du
+  calculateur moteur. L'écran Personnalisation lit en plus la configuration des calculateurs Renault (UCH, tableau
+  de bord…) avec la base DDT4All, **en lecture seule**. L'écriture de configuration, l'effacement des défauts
+  airbag ou ABS et les fonctions constructeur avancées nécessitent **DDT4All** ou l'outil constructeur.
 - **Clones ELM327 peu fiables** : la grande majorité des adaptateurs « v1.5 » ou « v2.1 » bon marché sont des clones
   au micrologiciel incomplet (commandes manquantes, protocoles K-Line défaillants, mesure de tension fantaisiste,
   saturation en écoute du bus). L'application les détecte et les signale.

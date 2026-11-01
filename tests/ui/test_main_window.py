@@ -279,3 +279,28 @@ def test_dtc_clear_during_engine_stop(qtbot: QtBot, monkeypatch) -> None:
 		assert any(r.event == "clear" for r in page.history.records())
 	finally:
 		window.shutdown()
+
+
+def test_ddt_page_reads_demo_ecus(qtbot: QtBot) -> None:
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.show()
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		page = window.pages["ddt"]
+		qtbot.waitUntil(lambda: page.db is not None, timeout=5000)  # base fictive chargée en mode démo
+		page._scan()
+		qtbot.waitUntil(lambda: page.scan_table.rowCount() == 2, timeout=15000)
+		assert all(s.target is not None for s in page.scans)
+		page.scan_table.selectRow(0)
+		page._read()
+		qtbot.waitUntil(lambda: page.values.rowCount() == 6, timeout=15000)
+		page.filter.setText("clignot")
+		assert page.values.rowCount() == 1
+		assert window.acquisition.running  # acquisition rétablie après la lecture
+		assert window.ctx.service.link.car_connected
+	finally:
+		window.shutdown()
