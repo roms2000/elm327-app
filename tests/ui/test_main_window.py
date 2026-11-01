@@ -114,3 +114,32 @@ def test_charts_overlay_cursor_and_csv(qtbot: QtBot, tmp_path) -> None:
 		assert len(page._plots) == 2
 	finally:
 		window.shutdown()
+
+
+def test_record_then_replay(qtbot: QtBot) -> None:
+	from obdtool.core import sessions
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		qtbot.waitUntil(lambda: window.acquisition.stats.get("RPM") is not None, timeout=10000)
+		path = window.sessions.start_recording("test ui")
+		qtbot.wait(1500)
+		window.sessions.stop_recording()
+		info = sessions.session_info(path)
+		assert info.duration > 0.5
+		page = window.pages["sessions"]
+		page.refresh()
+		assert page.table.rowCount() == 1
+		window.sessions.load(path)
+		window.sessions.set_speed(8.0)
+		qtbot.waitUntil(lambda: window.sessions.replay_state == "finished", timeout=10000)
+		assert window.acquisition.replaying
+		assert window.acquisition.store.get("RPM") is not None
+		window.sessions.stop_replay()
+		assert not window.acquisition.replaying
+	finally:
+		window.shutdown()

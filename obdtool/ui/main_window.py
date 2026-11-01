@@ -29,7 +29,9 @@ from obdtool.ui.pages.charts_page import ChartsPage
 from obdtool.ui.pages.connection_page import ConnectionPage
 from obdtool.ui.pages.dtc_page import DtcPage
 from obdtool.ui.pages.live_page import LivePage
+from obdtool.ui.pages.sessions_page import SessionsPage
 from obdtool.ui.pages.settings_page import SettingsPage
+from obdtool.ui.session_control import SessionController
 from obdtool.ui.status_bar import AppStatusBar
 
 log = logging.getLogger(__name__)
@@ -60,6 +62,7 @@ class MainWindow(QMainWindow):
 		self.resize(1280, 800)
 		self.pages: dict[str, BasePage] = {}
 		self.acquisition = AcquisitionController(ctx, self)
+		self.sessions = SessionController(ctx, self.acquisition, self)
 
 		central = QWidget()
 		layout = QHBoxLayout(central)
@@ -81,6 +84,8 @@ class MainWindow(QMainWindow):
 		self.status = AppStatusBar(ctx, self)
 		self.setStatusBar(self.status)
 		self.acquisition.rates_changed.connect(lambda q, _c: self.status.set_rate(q))
+		self.sessions.recording_changed.connect(self.status.set_recording)
+		self.sessions.replay_changed.connect(self._on_replay_state)
 		self._build_menu()
 		ctx.theme_changed.connect(self._apply_theme)
 		ctx.bridge.error.connect(self._on_error)
@@ -96,6 +101,8 @@ class MainWindow(QMainWindow):
 			return DtcPage(self.ctx)
 		if key == "charts":
 			return ChartsPage(self.ctx, self.acquisition)
+		if key == "sessions":
+			return SessionsPage(self.ctx, self.sessions)
 		return PlaceholderPage(title)
 
 	def add_page(self, key: str, title: str, page: BasePage) -> None:
@@ -125,6 +132,11 @@ class MainWindow(QMainWindow):
 	def _build_menu(self) -> None:
 		bar = self.menuBar()
 		file_menu = bar.addMenu("&Fichier")
+		self.record_action = QAction("Démarrer l'enregistrement", self)
+		self.record_action.setShortcut(QKeySequence("Ctrl+R"))
+		self.record_action.triggered.connect(self.toggle_recording)
+		file_menu.addAction(self.record_action)
+		file_menu.addSeparator()
 		quit_action = QAction("&Quitter", self)
 		quit_action.setShortcut(QKeySequence.StandardKey.Quit)
 		quit_action.triggered.connect(self.close)
@@ -147,6 +159,24 @@ class MainWindow(QMainWindow):
 		about = QAction("À propos", self)
 		about.triggered.connect(self._about)
 		help_menu.addAction(about)
+
+	def toggle_recording(self) -> None:
+		"""Démarre ou arrête l'enregistrement de session."""
+		if self.sessions.recording:
+			self.sessions.stop_recording()
+		elif self.ctx.service.link.car_connected and self.sessions.replay is None:
+			self.sessions.start_recording()
+		else:
+			self.ctx.notify("Enregistrement impossible : pas de connexion au véhicule (ou relecture en cours).")
+		self.record_action.setText(
+			"Arrêter l'enregistrement" if self.sessions.recording else "Démarrer l'enregistrement"
+		)
+
+	def _on_replay_state(self, state: str) -> None:
+		if state == "stopped":
+			self.status.set_recording(self.sessions.recording)
+		elif self.sessions.replay is not None:
+			self.status.recording.setText(f"▶ Relecture : {self.sessions.replay.path.stem}")
 
 	def toggle_fullscreen(self) -> None:
 		"""Bascule le mode plein écran."""
@@ -196,7 +226,8 @@ class MainWindow(QMainWindow):
 		self.ctx.notify(text, 8000)
 
 	def shutdown(self) -> None:
-		"""Arrête le service de diagnostic."""
+		"""Ferme l'enregistrement en cours et arrête le service de diagnostic."""
+		self.sessions.shutdown()
 		self.ctx.shutdown()
 
 	def closeEvent(self, event: QCloseEvent) -> None:
