@@ -26,6 +26,7 @@ from obdtool.ui import theme
 from obdtool.ui.acquisition import AcquisitionController
 from obdtool.ui.context import AppContext
 from obdtool.ui.pages.base import BasePage
+from obdtool.ui.qtcompat import emit
 
 _COLUMNS = ("Nom", "Valeur", "Unité", "Min", "Max", "Moyenne", "PID", "État")
 
@@ -102,7 +103,7 @@ class LiveTableModel(QAbstractTableModel):
 
 	def refresh(self) -> None:
 		if self.keys:
-			self.dataChanged.emit(self.index(0, 0), self.index(len(self.keys) - 1, len(_COLUMNS) - 1))
+			emit(self.dataChanged, self.index(0, 0), self.index(len(self.keys) - 1, len(_COLUMNS) - 1))
 
 
 class LivePage(BasePage):

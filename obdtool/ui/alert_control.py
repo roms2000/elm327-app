@@ -17,6 +17,7 @@ from obdtool.core.samples import SampleBatch
 from obdtool.ui import theme
 from obdtool.ui.acquisition import AcquisitionController
 from obdtool.ui.context import AppContext
+from obdtool.ui.qtcompat import emit
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class AlertController(QObject):
 		if save:
 			self.ctx.settings.extra["alerts"] = dump_rules(rules)
 			self.ctx.save_settings()
-		self.changed.emit()
+		emit(self.changed)
 
 	def active(self) -> list[AlertRule]:
 		return self.engine.active()
@@ -80,7 +81,7 @@ class AlertController(QObject):
 			self._log(event)
 		if any(e.active and e.rule.sound for e in events) and self.ctx.settings.general.alert_sound:
 			self._play()
-		self.changed.emit()
+		emit(self.changed)
 
 	def _log(self, event: AlertEvent) -> None:
 		if event.active:

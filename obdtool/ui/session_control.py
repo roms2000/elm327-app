@@ -12,6 +12,7 @@ from obdtool.core.samples import SampleBatch
 from obdtool.core.sessions import SessionRecorder, SessionReplay
 from obdtool.ui.acquisition import AcquisitionController
 from obdtool.ui.context import AppContext
+from obdtool.ui.qtcompat import emit
 
 log = logging.getLogger(__name__)
 
@@ -56,13 +57,13 @@ class SessionController(QObject):
 		}
 		path = self.recorder.start(metadata, name)
 		self._flush.start()
-		self.recording_changed.emit(True, path.stem)
+		emit(self.recording_changed, True, path.stem)
 		return path
 
 	def stop_recording(self) -> Path | None:
 		path = self.recorder.stop()
 		self._flush.stop()
-		self.recording_changed.emit(False, path.stem if path else "")
+		emit(self.recording_changed, False, path.stem if path else "")
 		if path:
 			self.ctx.notify(f"Session enregistrée : {path.name} ({self.recorder.samples} mesures)")
 		return path
@@ -119,7 +120,7 @@ class SessionController(QObject):
 		self.replay.seek(t)
 		self.acq.clear_data()
 		self.acq.publish(self.replay.history_until(self.replay.position))
-		self.replay_position.emit(self.replay.position, self.replay.start, self.replay.end)
+		emit(self.replay_position, self.replay.position, self.replay.start, self.replay.end)
 
 	def _tick(self) -> None:
 		if self.replay is None:
@@ -130,14 +131,14 @@ class SessionController(QObject):
 		batch = self.replay.advance(dt)
 		if batch.samples:
 			self.acq.publish(batch)
-		self.replay_position.emit(self.replay.position, self.replay.start, self.replay.end)
+		emit(self.replay_position, self.replay.position, self.replay.start, self.replay.end)
 		if self.replay.finished:
 			self._timer.stop()
 			self._set_state("finished")
 
 	def _set_state(self, state: str) -> None:
 		self.replay_state = state
-		self.replay_changed.emit(state)
+		emit(self.replay_changed, state)
 
 	def shutdown(self) -> None:
 		"""Ferme proprement l'enregistrement en cours."""

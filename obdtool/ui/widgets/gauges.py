@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from obdtool.core import pids, units
 from obdtool.core.dashboard import GaugeConfig
+from obdtool.ui.qtcompat import emit
 
 _START_ANGLE = 225.0  # degrés (sens trigonométrique), début du cadran en bas à gauche
 _SPAN = 270.0
@@ -39,7 +40,7 @@ class GaugeWidget(QWidget):
 			self.update()
 
 	def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-		self.edit_requested.emit()
+		emit(self.edit_requested)
 		super().mouseDoubleClickEvent(event)
 
 	# ---------------------------------------------------------- utilitaires

@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject, Signal
 from obdtool.core.service import DiagnosticService
 from obdtool.core.settings import Settings
 from obdtool.ui.bridge import ServiceBridge
+from obdtool.ui.qtcompat import emit
 
 
 class AppContext(QObject):
@@ -27,11 +28,11 @@ class AppContext(QObject):
 	def save_settings(self) -> None:
 		"""Enregistre les réglages et prévient les abonnés."""
 		self.settings.save()
-		self.settings_changed.emit()
+		emit(self.settings_changed)
 
 	def notify(self, text: str, timeout_ms: int = 5000) -> None:
 		"""Affiche un message temporaire dans la barre d'état."""
-		self.status_message.emit(text, timeout_ms)
+		emit(self.status_message, text, timeout_ms)
 
 	def shutdown(self) -> None:
 		"""Arrête proprement le service de diagnostic."""

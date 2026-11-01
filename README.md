@@ -291,6 +291,10 @@ OBD est isolée du bus principal par une passerelle : peu ou pas de trames sont 
 
 ## Limites connues
 
+- **Python 3.11 et PySide6 6.12.0** : cette version de PySide6 dérègle un compteur interne de Python 3.11 à chaque
+  émission de signal et finit par faire planter l'application. Sous Python 3.11, l'installation retient donc
+  PySide6 6.11 ou antérieur ; l'application compense aussi le défaut si la version fautive est présente.
+
 - **OBD-II générique uniquement.** Un ELM327 ne dialogue qu'avec les fonctions antipollution normalisées du
   calculateur moteur. Les calculateurs Renault spécifiques (ABS, airbag, UCH, direction assistée, climatisation,
   tableau de bord…) et les paramètres constructeur nécessitent un outil comme **DDT4All** (avec un adaptateur

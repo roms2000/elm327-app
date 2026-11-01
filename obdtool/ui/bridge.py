@@ -24,6 +24,7 @@ from obdtool.core.service import (
 	StateEvent,
 	VoltageEvent,
 )
+from obdtool.ui.qtcompat import emit
 
 DRAIN_INTERVAL_MS = 20
 
@@ -81,15 +82,15 @@ class ServiceBridge(QObject):
 				continue
 			event = payload
 			if isinstance(event, StateEvent):
-				self.state_changed.emit(event)
+				emit(self.state_changed, event)
 			elif isinstance(event, ErrorEvent):
-				self.error.emit(event)
+				emit(self.error, event)
 			elif isinstance(event, VoltageEvent):
-				self.voltage.emit(event.voltage)
+				emit(self.voltage, event.voltage)
 			elif isinstance(event, RawEvent):
-				self.raw.emit(event)
+				emit(self.raw, event)
 			elif isinstance(event, PollEvent):
-				self.poll.emit(event.payload)
+				emit(self.poll, event.payload)
 
 	def _dispatch(self, future: Future, on_done: Callable[[Any], None] | None, on_error: Callable | None) -> None:
 		if future.cancelled():

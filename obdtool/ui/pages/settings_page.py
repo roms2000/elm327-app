@@ -27,6 +27,7 @@ from obdtool.ui.alert_control import AlertController
 from obdtool.ui.context import AppContext
 from obdtool.ui.log_viewer import LogViewerDialog, confirm_delete_old_logs, open_log_folder
 from obdtool.ui.pages.base import BasePage
+from obdtool.ui.qtcompat import emit
 
 _THEMES = [("system", "Selon le système"), ("light", "Clair"), ("dark", "Sombre")]
 _UNITS = [("metric", "Métrique (km/h, °C, kPa)"), ("imperial", "Impérial (mph, °F, psi)")]
@@ -229,7 +230,7 @@ class SettingsPage(BasePage):
 
 	def _theme_changed(self) -> None:
 		self._save()
-		self.ctx.theme_changed.emit(self.theme.currentData())
+		emit(self.ctx.theme_changed, self.theme.currentData())
 
 	def _level_changed(self) -> None:
 		self._save()

@@ -15,6 +15,7 @@ from obdtool.core.samples import SampleBatch, SessionStats
 from obdtool.core.service import LinkState, StateEvent
 from obdtool.core.timeseries import TimeSeriesStore
 from obdtool.ui.context import AppContext
+from obdtool.ui.qtcompat import emit
 
 log = logging.getLogger(__name__)
 
@@ -109,14 +110,14 @@ class AcquisitionController(QObject):
 
 	def _apply_selection(self) -> None:
 		self.poller.set_selection(self.effective_selection())
-		self.selection_changed.emit()
+		emit(self.selection_changed)
 
 	# ----------------------------------------------------------- contrôle
 	def set_running(self, running: bool) -> None:
 		"""Démarre ou suspend l'interrogation cyclique."""
 		self.running = running
 		self.ctx.service.set_polling(running and not self.replaying and self.ctx.service.state == LinkState.CONNECTED)
-		self.running_changed.emit(running)
+		emit(self.running_changed, running)
 
 	def set_interval(self, milliseconds: int) -> None:
 		self.poller.set_interval(milliseconds)
@@ -136,7 +137,7 @@ class AcquisitionController(QObject):
 		self._complete(batch)
 		self.stats.add_batch(batch)
 		self.store.add_batch(batch)
-		self.batch.emit(batch)
+		emit(self.batch, batch)
 
 	def clear_data(self) -> None:
 		"""Efface les séries mémorisées, les statistiques et les cumuls de session."""
@@ -160,7 +161,7 @@ class AcquisitionController(QObject):
 		elif event.state == LinkState.DISCONNECTED:
 			self.supported = None
 			self.ctx.service.set_polling(False)
-			self.supported_changed.emit()
+			emit(self.supported_changed)
 			self._apply_selection()
 		else:
 			self.ctx.service.set_polling(False)
@@ -169,7 +170,7 @@ class AcquisitionController(QObject):
 		self.supported = supported
 		self.derived.has_maf = 0x10 in supported
 		self.derived.has_fuel_rate = 0x5E in supported
-		self.supported_changed.emit()
+		emit(self.supported_changed)
 		self._apply_selection()
 		self.set_running(self.running)
 
@@ -186,5 +187,5 @@ class AcquisitionController(QObject):
 		self._complete(payload)
 		self.stats.add_batch(payload)
 		self.store.add_batch(payload)
-		self.rates_changed.emit(payload.query_rate, payload.cycle_rate)
-		self.batch.emit(payload)
+		emit(self.rates_changed, payload.query_rate, payload.cycle_rate)
+		emit(self.batch, payload)

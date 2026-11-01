@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 import threading
 
+import PySide6
 import pytest
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QCheckBox, QLabel, QPushButton
@@ -27,6 +28,7 @@ def _drift(func, repeat: int = 2000) -> tuple[int, int]:
 
 
 @pytest.mark.skipif(sys.version_info >= (3, 12), reason="booléens immortels depuis Python 3.12")
+@pytest.mark.skipif(PySide6.__version__.startswith("6.12.0"), reason="défaut connu de PySide6 6.12.0 (cf. pyproject)")
 def test_report_bool_refcount_drift(qtbot) -> None:
 	emitter = _Emitter()
 	received = []
@@ -78,3 +80,14 @@ def test_bridge_never_emits_from_worker_thread(qtbot) -> None:
 	finally:
 		bridge.detach()
 		service.shutdown()
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 12), reason="booléens immortels depuis Python 3.12")
+def test_compat_emit_keeps_bool_refcount(qtbot) -> None:
+	from obdtool.ui.qtcompat import emit
+
+	emitter = _Emitter()
+	emitter.obj.connect(lambda _value: None)
+	emit(emitter.obj, 0)  # mesure initiale du défaut
+	dt, df = _drift(lambda: emit(emitter.obj, 1), 5000)
+	assert abs(dt) < 50 and abs(df) < 50
