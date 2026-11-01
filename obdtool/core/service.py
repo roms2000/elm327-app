@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 RECONNECT_DELAY_S = 3.0
 VEHICLE_RETRY_DELAY_S = 10.0
 VOLTAGE_PERIOD_S = 5.0
+VEHICLE_LOST_KINDS = (ErrorKind.UNABLE_TO_CONNECT, ErrorKind.CAN_ERROR, ErrorKind.BUS_INIT)
 
 
 class LinkState(Enum):
@@ -254,7 +255,13 @@ class DiagnosticService:
 		return ok
 
 	def _handle_error(self, error: ObdError, context: str) -> None:
-		"""Traite une erreur : perte de liaison → reconnexion éventuelle."""
+		"""Traite une erreur : véhicule muet → attente du contact ; perte de liaison → reconnexion éventuelle."""
+		if error.kind in VEHICLE_LOST_KINDS and self.state == LinkState.CONNECTED and context == "interrogation":
+			self.link.mark_vehicle_lost()
+			self._next_vehicle_retry = time.monotonic() + VEHICLE_RETRY_DELAY_S
+			self._set_state(LinkState.ADAPTER_ONLY, error.user_message)
+			self._emit(ErrorEvent(error, context))
+			return
 		if not error.is_link_lost:
 			return
 		self.link.close()

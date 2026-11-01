@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
@@ -27,7 +29,7 @@ def apply_theme(app: QApplication, theme: str) -> None:
 	pg.setConfigOptions(
 		antialias=True, background="#1e1f22" if dark else "w", foreground="#d0d0d0" if dark else "#303030"
 	)
-	app.setStyleSheet(_STYLE)
+	app.setStyleSheet(_STYLE + _indicator_style(dark))
 
 
 def _light_palette() -> QPalette:
@@ -71,6 +73,12 @@ def _dark_palette() -> QPalette:
 		QPalette.ColorRole.HighlightedText: "#ffffff",
 		QPalette.ColorRole.Link: "#6ea8ff",
 		QPalette.ColorRole.PlaceholderText: "#7f8288",
+		# Rôles utilisés par Fusion pour les contours (cases à cocher, cadres) : à éclaircir en sombre.
+		QPalette.ColorRole.Light: "#5c6066",
+		QPalette.ColorRole.Midlight: "#4a4d52",
+		QPalette.ColorRole.Mid: "#6a6e75",
+		QPalette.ColorRole.Dark: "#7a7e85",
+		QPalette.ColorRole.Shadow: "#101113",
 	}
 	for role, color in colors.items():
 		pal.setColor(role, QColor(color))
@@ -94,4 +102,28 @@ QLabel#pageTitle { font-size: 16pt; font-weight: 600; }
 QLabel#pageSubtitle { color: palette(placeholder-text); }
 QGroupBox { font-weight: 600; }
 QLabel.badge { border-radius: 4px; padding: 2px 6px; }
+"""
+
+
+_RESOURCES = Path(__file__).parent / "resources"
+
+
+def _indicator_style(dark: bool) -> str:
+	"""Cases à cocher lisibles dans les deux thèmes (Fusion les rend presque invisibles en sombre)."""
+	border = "#8a8d93" if dark else "#8c8c8c"
+	base = "#1e1f22" if dark else "#ffffff"
+	accent = "#3d6fc4" if dark else "#2f6fd6"
+	check = (_RESOURCES / "check.svg").as_posix()
+	partial = (_RESOURCES / "partial.svg").as_posix()
+	selectors = (
+		"QCheckBox::indicator, QTreeView::indicator, QListView::indicator, QTableView::indicator, QGroupBox::indicator"
+	)
+	checked = ", ".join(f"{s.strip()}:checked" for s in selectors.split(","))
+	indeterminate = ", ".join(f"{s.strip()}:indeterminate" for s in selectors.split(","))
+	disabled = ", ".join(f"{s.strip()}:disabled" for s in selectors.split(","))
+	return f"""
+{selectors} {{ width: 13px; height: 13px; border: 1px solid {border}; border-radius: 3px; background: {base}; }}
+{checked} {{ background: {accent}; border-color: {accent}; image: url({check}); }}
+{indeterminate} {{ background: {accent}; border-color: {accent}; image: url({partial}); }}
+{disabled} {{ border-color: {COLOR_MUTED}; }}
 """

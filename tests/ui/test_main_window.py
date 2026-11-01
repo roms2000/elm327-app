@@ -46,3 +46,24 @@ def test_log_viewer_opens(qtbot: QtBot) -> None:
 	dialog = LogViewerDialog()
 	qtbot.addWidget(dialog)
 	assert dialog.sessions.count() >= 1
+
+
+def test_live_page_receives_values(qtbot: QtBot) -> None:
+	from obdtool.core.service import LinkState
+
+	window = MainWindow(AppContext(Settings()))
+	qtbot.addWidget(window)
+	try:
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		acq = window.acquisition
+		qtbot.waitUntil(lambda: acq.supported is not None, timeout=10000)
+		qtbot.waitUntil(lambda: acq.stats.get("RPM") is not None, timeout=10000)
+		page = window.pages["live"]
+		assert "RPM" in page.model.keys
+		page._select_none()
+		assert acq.live_selection() == []
+		page._select_default()
+		assert "RPM" in acq.live_selection()
+	finally:
+		window.shutdown()

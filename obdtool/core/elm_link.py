@@ -174,7 +174,7 @@ class ElmLink:
 		self._lock = threading.RLock()
 		self.config: LinkConfig | None = None
 		self.info = AdapterInfo()
-		self._frame_counts: dict[bytes, int] = {}
+		self._frame_counts: dict[str, int] = {}
 		self.raw_listener: Callable[[str, list[str]], None] | None = None
 
 	# ----------------------------------------------------------------- état
@@ -261,6 +261,14 @@ class ElmLink:
 		self._frame_counts.clear()
 		self._update_protocol_info(elm)
 		return ok
+
+	def mark_vehicle_lost(self) -> None:
+		"""Le véhicule ne répond plus (contact coupé) : l'adaptateur reste ouvert."""
+		if self._elm is not None and self._elm.status() == OBDStatus.CAR_CONNECTED:
+			self._elm._set_status(OBDStatus.ELM_CONNECTED)
+			self.info.ecu_responding = False
+			self.info.ecu_error = ErrorKind.UNABLE_TO_CONNECT.value
+			self._frame_counts.clear()
 
 	# ---------------------------------------------------------- informations
 	def read_adapter_info(self) -> AdapterInfo:
@@ -350,36 +358,28 @@ class ElmLink:
 
 		Lève `ObdError` si le calculateur ne répond pas, répond négativement ou si la réponse est illisible.
 		"""
-		elm = self._require()
-		if not self.car_connected:
-			raise ObdError(ErrorKind.UNABLE_TO_CONNECT)
-		request = bytes(command.command)
-		to_send = request
-		if self.config and self.config.fast and command.fast and request in self._frame_counts:
-			to_send = request + format(self._frame_counts[request], "X").encode()
-		lines = self.send_raw(to_send.decode())
-		messages = [m for m in elm.parse(lines) if m.data]
-		if not messages:
-			raise ObdError(ErrorKind.INVALID_RESPONSE, f"(commande {request.decode()})", raw=lines)
-		for message in messages:
-			if message.data[0] == 0x7F:
-				nrc = message.data[2] if len(message.data) > 2 else 0
-				if nrc in (0x11, 0x12, 0x31):
-					raise ObdError(ErrorKind.UNSUPPORTED, f"(code 0x{nrc:02X})", raw=lines)
-				raise ObdError(ErrorKind.NEGATIVE_RESPONSE, f"(code 0x{nrc:02X})", raw=lines)
-		if command.fast and request not in self._frame_counts:
-			frames = sum(len(m.frames) for m in messages)
-			if 0 < frames <= 15:
-				self._frame_counts[request] = frames
-		response = command(messages)
-		return response
+		messages = self.request(bytes(command.command).decode(), fast=command.fast)
+		return command(messages)
 
-	def query_bytes(self, request: str) -> list[Any]:
+	def query_bytes(self, request: str, fast: bool = False) -> list[Any]:
 		"""Envoie une requête hexadécimale et retourne les messages décodés (données brutes)."""
+		return self.request(request, fast=fast)
+
+	def request(self, request: str, fast: bool = False) -> list[Any]:
+		"""Envoie une requête OBD hexadécimale et retourne les messages python-OBD.
+
+		En mode rapide, le nombre de trames attendu (mémorisé à la première réponse) est ajouté à la requête :
+		l'ELM327 rend la main dès qu'il l'a reçu au lieu d'attendre la fin de son délai.
+		"""
 		elm = self._require()
 		if not self.car_connected:
 			raise ObdError(ErrorKind.UNABLE_TO_CONNECT)
-		lines = self.send_raw(request)
+		request = request.strip().replace(" ", "").upper()
+		use_fast = fast and bool(self.config and self.config.fast)
+		to_send = request
+		if use_fast and request in self._frame_counts:
+			to_send = request + format(self._frame_counts[request], "X")
+		lines = self.send_raw(to_send)
 		messages = [m for m in elm.parse(lines) if m.data]
 		if not messages:
 			raise ObdError(ErrorKind.INVALID_RESPONSE, f"(requête {request})", raw=lines)
@@ -388,6 +388,10 @@ class ElmLink:
 				nrc = message.data[2] if len(message.data) > 2 else 0
 				kind = ErrorKind.UNSUPPORTED if nrc in (0x11, 0x12, 0x31) else ErrorKind.NEGATIVE_RESPONSE
 				raise ObdError(kind, f"(code 0x{nrc:02X})", raw=lines)
+		if use_fast and request not in self._frame_counts:
+			frames = sum(len(m.frames) for m in messages)
+			if 0 < frames <= 15:
+				self._frame_counts[request] = frames
 		return messages
 
 	def monitor(self, command: str, on_line: Callable[[str], None], should_stop: Callable[[], bool]) -> None:

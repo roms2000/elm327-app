@@ -21,10 +21,12 @@ from obdtool import APP_DISPLAY_NAME, __version__
 from obdtool.core import transport
 from obdtool.core.service import ErrorEvent
 from obdtool.ui import theme
+from obdtool.ui.acquisition import AcquisitionController
 from obdtool.ui.context import AppContext
 from obdtool.ui.log_viewer import LogViewerDialog, open_log_folder
 from obdtool.ui.pages.base import BasePage, PlaceholderPage
 from obdtool.ui.pages.connection_page import ConnectionPage
+from obdtool.ui.pages.live_page import LivePage
 from obdtool.ui.pages.settings_page import SettingsPage
 from obdtool.ui.status_bar import AppStatusBar
 
@@ -55,6 +57,7 @@ class MainWindow(QMainWindow):
 		self.setWindowTitle(f"{APP_DISPLAY_NAME} — diagnostic OBD-II")
 		self.resize(1280, 800)
 		self.pages: dict[str, BasePage] = {}
+		self.acquisition = AcquisitionController(ctx, self)
 
 		central = QWidget()
 		layout = QHBoxLayout(central)
@@ -75,6 +78,7 @@ class MainWindow(QMainWindow):
 		self.nav.setCurrentRow(0)
 		self.status = AppStatusBar(ctx, self)
 		self.setStatusBar(self.status)
+		self.acquisition.rates_changed.connect(lambda q, _c: self.status.set_rate(q))
 		self._build_menu()
 		ctx.theme_changed.connect(self._apply_theme)
 		ctx.bridge.error.connect(self._on_error)
@@ -84,6 +88,8 @@ class MainWindow(QMainWindow):
 			return SettingsPage(self.ctx)
 		if key == "connection":
 			return ConnectionPage(self.ctx)
+		if key == "live":
+			return LivePage(self.ctx, self.acquisition)
 		return PlaceholderPage(title)
 
 	def add_page(self, key: str, title: str, page: BasePage) -> None:
