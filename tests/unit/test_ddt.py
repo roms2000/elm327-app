@@ -124,3 +124,27 @@ def test_isotp_reassembly_and_ident() -> None:
 	assert reassemble(["765 02 50 C0"], "765") == b"\x50\xc0"
 	assert reassemble(["NO DATA"], "765") == b""
 	assert parse_ident_2180(b"\x61\x80") is None
+
+
+def test_renault_fault_list_and_status() -> None:
+	from obdtool.core.ddt.faults import RenaultFault, parse_fault_list
+
+	faults = parse_fault_list(bytes.fromhex("57 02 0010E0 012320 000000".replace(" ", "")))
+	assert [f.code for f in faults] == ["P0010", "P0123"]
+	assert faults[0].present and "voyant" in faults[0].state
+	assert not faults[1].present and faults[1].state == "mémorisé, absent actuellement"
+	assert parse_fault_list(bytes.fromhex("5700")) == []
+	assert RenaultFault("0010", 0x40).state == "intermittent / en cours de validation"
+	with pytest.raises(ObdError):
+		parse_fault_list(bytes.fromhex("7F1711"))
+
+
+def test_clear_request_stays_outside_read_only_path() -> None:
+	from obdtool.core.ddt.session import CLEAR_ALL_FAULTS
+
+	with pytest.raises(ObdError) as err:
+		check_read_only("14FF00")  # l'effacement ne passe jamais par request()
+	assert err.value.kind == ErrorKind.BLOCKED
+	assert bytes.fromhex("14FF00") == CLEAR_ALL_FAULTS
+	for read in ("17FF00", "1802FF00"):
+		check_read_only(read)

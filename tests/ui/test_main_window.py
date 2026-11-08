@@ -304,3 +304,33 @@ def test_ddt_page_reads_demo_ecus(qtbot: QtBot) -> None:
 		assert window.ctx.service.link.car_connected
 	finally:
 		window.shutdown()
+
+
+def test_dtc_page_renault_fault_memory(qtbot: QtBot, monkeypatch) -> None:
+	import threading
+
+	from obdtool.core.service import LinkState
+	from obdtool.ui.pages.dtc_page import DtcPage
+
+	settings = Settings()
+	settings.connection.demo_scenario = "faults"
+	window = MainWindow(AppContext(settings))
+	qtbot.addWidget(window)
+	monkeypatch.setattr(DtcPage, "_confirm_clear", lambda self: True)
+	try:
+		window.start_demo()
+		qtbot.waitUntil(lambda: window.ctx.service.state == LinkState.CONNECTED, timeout=20000)
+		page = window.pages["dtc"]
+		page.read_renault_faults()
+		qtbot.waitUntil(lambda: page.renault_table.rowCount() == 1, timeout=10000)
+		assert page.renault_table.item(0, 0).text() == "P0010"
+		emulator = window.ctx.service.emulator
+		emulator.refuse_clear_while_running = True
+		threading.Timer(0.8, lambda: setattr(emulator, "engine_running", False)).start()
+		page._clear_renault_during_stop()
+		qtbot.waitUntil(lambda: "constructeur effacés" in page.renault_status.text(), timeout=15000)
+		assert emulator.renault_cleared
+		page.read_renault_faults()
+		qtbot.waitUntil(lambda: "vide" in page.renault_status.text(), timeout=10000)
+	finally:
+		window.shutdown()

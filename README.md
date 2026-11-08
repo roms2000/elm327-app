@@ -203,6 +203,13 @@ l'effacement moteur tournant, la case « Autoriser moteur au ralenti » suffit (
 **Historique local** : chaque lecture et chaque effacement sont enregistrés (date, codes, voyant, distance depuis
 l'effacement, kilométrage saisi à la main). Un code revenu après un effacement est signalé.
 
+**Défauts constructeur (Renault)** (onglet de l'écran Défauts) : les calculateurs moteur Renault ont une seconde
+mémoire de défauts, propre au constructeur, qui pilote par exemple le message « Injection à contrôler » du tableau
+de bord. L'effacement OBD (mode 04) éteint le voyant MIL mais **n'efface pas cette mémoire**. L'onglet la lit
+(services KWP2000 `17FF00` / `1802FF00`, adressés au calculateur moteur 7E0) avec l'état de chaque défaut
+(présent, mémorisé, intermittent — interprétation ISO 14230 indicative) et l'efface (`14FF00`), y compris « en
+coupant le moteur » pour les véhicules sans clé. Un défaut **présent** reviendra tant que sa cause n'est pas réparée.
+
 **Exporter le rapport** (HTML ou texte) et **Bilan complet** (codes, freeze frame, moniteurs, tests mode 06,
 identification).
 

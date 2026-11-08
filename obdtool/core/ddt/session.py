@@ -22,6 +22,8 @@ READ_SERVICES = {0x17, 0x18, 0x19, 0x1A, 0x21, 0x22, 0x3E}
 # Sessions autorisées : par défaut (01, 81), diagnostic après-vente Renault (C0), étendue (03).
 ALLOWED_SESSIONS = {0x01, 0x81, 0xC0, 0x03}
 KEEPALIVE_S = 3.0
+# Effacement de la mémoire de défauts constructeur (KWP2000 ClearDiagnosticInformation, tous les groupes).
+CLEAR_ALL_FAULTS = bytes.fromhex("14FF00")
 
 NEGATIVE_CODES = {
 	0x10: "refus général",
@@ -129,12 +131,21 @@ class RenaultSession:
 
 	def request(self, request: str, allow_negative: bool = False) -> bytes:
 		"""Envoie une requête de lecture et retourne la réponse complète (octet de service compris)."""
-		data = check_read_only(request)
+		return self._exchange(check_read_only(request), allow_negative)
+
+	def clear_fault_memory(self, allow_negative: bool = True) -> bytes:
+		"""Efface la mémoire de défauts constructeur (KWP2000 14 FF 00, tous les groupes).
+
+		Seule exception au mode lecture seule, réservée à l'écran Défauts (double confirmation de l'utilisateur).
+		"""
+		return self._exchange(CLEAR_ALL_FAULTS, allow_negative, timeout=6.0)
+
+	def _exchange(self, data: bytes, allow_negative: bool, timeout: float = 4.0) -> bytes:
 		if self._open and self.session and time.monotonic() - self._last > KEEPALIVE_S and data[0] != 0x10:
-			self.request(self.session, allow_negative=True)
+			self._exchange(check_read_only(self.session), allow_negative=True)
 		hex_request = data.hex().upper()
 		for _attempt in range(5):
-			lines = self.link.send_raw(hex_request, check=False, timeout=4.0, clean=True)
+			lines = self.link.send_raw(hex_request, check=False, timeout=timeout, clean=True)
 			self._last = time.monotonic()
 			response = reassemble(lines, self.rx_id)
 			if not response:
@@ -159,7 +170,7 @@ class RenaultSession:
 			return
 		self._open = False
 		try:
-			self.request("1081", allow_negative=True)
+			self._exchange(check_read_only("1081"), allow_negative=True)
 		except ObdError as exc:
 			if exc.is_link_lost:
 				raise

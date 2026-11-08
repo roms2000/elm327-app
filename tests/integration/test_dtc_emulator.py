@@ -124,3 +124,23 @@ def test_renault_read_only_session_on_demo_ecus() -> None:
 	finally:
 		link.close()
 		emu.stop()
+
+
+def test_renault_fault_memory_read_and_clear_during_stop(faulty_link: tuple[ElmLink, DemoEmulator]) -> None:
+	"""Mémoire constructeur : défaut présent après le mode 04, effacé par 14 FF 00 pendant la coupure du moteur."""
+	import threading
+
+	from obdtool.core.ddt import faults
+	from obdtool.core.errors import ObdError
+
+	link, emu = faulty_link
+	dtc.clear_dtcs(link)  # mode 04 : la mémoire Renault n'est pas touchée
+	remaining, request = faults.read_faults(link)
+	assert request == "17FF00" and [f.code for f in remaining] == ["P0010"] and remaining[0].present
+	emu.refuse_clear_while_running = True
+	with pytest.raises(ObdError):
+		faults.clear_faults(link)
+	threading.Timer(0.6, lambda: setattr(emu, "engine_running", False)).start()
+	assert faults.clear_faults(link, during_engine_stop=True, window_s=10) > 1
+	assert faults.read_faults(link)[0] == []
+	assert link.car_connected and link.query_bytes("010C")  # configuration OBD rétablie

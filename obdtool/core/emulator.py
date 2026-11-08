@@ -82,6 +82,8 @@ class DemoEmulator:
 		# Comportement d'un calculateur de véhicule sans clé : effacement refusé moteur tournant (7F 04 22).
 		self.refuse_clear_while_running = False
 		self.engine_running = True
+		self.renault_faults: list[tuple[str, int]] = []
+		self.renault_cleared = False
 		self._filter: _EmulatorLogFilter | None = None
 
 	@property
@@ -144,6 +146,9 @@ class DemoEmulator:
 			"0A": [],
 		}
 		self.cleared = False
+		# Mémoire de défauts constructeur du calculateur moteur (code sur 2 octets, état ISO 14230).
+		self.renault_faults: list[tuple[str, int]] = [("0010", 0xE0)] if faults else []
+		self.renault_cleared = False
 		if self._elm is None:
 			return
 		if scenario not in self._elm.ObdMessage:
@@ -294,6 +299,31 @@ class DemoEmulator:
 					"Priority": 1,
 					"ResponseFooter": footer,
 				}
+
+		# Calculateur moteur, services Renault (adresse physique 7E0) : mémoire de défauts constructeur.
+		def engine(request: str) -> str:
+			if request == "17FF00":
+				faults = [] if self.renault_cleared else self.renault_faults
+				return "57 " + f"{len(faults):02X}" + "".join(f" {c[:2]} {c[2:]} {st:02X}" for c, st in faults)
+			if request == "14FF00":
+				if self.refuse_clear_while_running and self.engine_running:
+					return "7F 14 22"
+				self.renault_cleared = True
+				return "54 FF 00"
+			return {"10C0": "50 C0", "1081": "50 81", "1802FF00": "7F 18 11"}[request]
+
+		for request in ("10C0", "1081", "17FF00", "1802FF00", "14FF00"):
+
+			def engine_footer(emu: Any, cmd: str, pid: str, uc_val: Any, request: str = request) -> str:
+				return self._frames("7E8", engine(request))
+
+			entries[f"DEMO_ENGINE_{request}"] = {
+				"Request": f"^{request}$",
+				"Descr": f"Moteur Renault {request}",
+				"Header": "7E0",
+				"Priority": 1,
+				"ResponseFooter": engine_footer,
+			}
 
 		def reset_cra(emu: Any, cmd: str, pid: str, uc_val: Any) -> str:
 			emu.counters["cmd_cra"] = None  # l'émulateur n'efface pas le filtre de réception sur ATAR

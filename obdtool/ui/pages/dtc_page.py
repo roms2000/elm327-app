@@ -6,6 +6,7 @@ import html
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from obdtool.core import dtc, pids
+from obdtool.core.ddt import faults
 from obdtool.core.dtc_history import DtcHistory, HistoryRecord
 from obdtool.core.elm_link import ElmLink
 from obdtool.core.errors import ErrorKind, ObdError
@@ -271,6 +273,7 @@ class DtcPage(BasePage):
 		row.addWidget(self.recurring)
 		history_layout.addLayout(row)
 		tabs.addTab(history_box, "Historique local")
+		tabs.addTab(self._build_renault_tab(), "Défauts constructeur (Renault)")
 		splitter.addWidget(tabs)
 		splitter.setSizes([300, 300])
 		self.content.addWidget(splitter, 1)
@@ -441,9 +444,33 @@ class DtcPage(BasePage):
 		)
 
 	def _clear_during_stop(self) -> None:
-		"""Effacement répété pendant la coupure du moteur (véhicules sans clé)."""
+		"""Effacement OBD répété pendant la coupure du moteur (véhicules sans clé)."""
 		if not self._confirm_clear():
 			return
+		before = self.report
+
+		def success(attempts: int) -> None:
+			self._record_clear(before, "effacement pendant la coupure du moteur")
+			self.status.setText(
+				f"<span style='color:{theme.COLOR_OK}'>Codes effacés pendant la coupure du moteur "
+				f"(demande n° {attempts}).</span> Redémarrez puis cliquez sur « Lire les codes » pour vérifier."
+			)
+
+		self._clear_with_engine_stop(
+			self.clear_stop_btn,
+			"effacement pendant la coupure",
+			lambda link, stop, on_attempt: dtc.clear_during_engine_stop(link, stop, on_attempt),
+			success,
+		)
+
+	def _clear_with_engine_stop(
+		self,
+		button: QPushButton,
+		job_name: str,
+		run: Callable[[ElmLink, Callable[[], bool], Callable[[int, str], None]], int],
+		success: Callable[[int], None],
+	) -> None:
+		"""Procédure commune : consignes, demande répétée pendant la coupure du moteur, fenêtre de progression."""
 		answer = QMessageBox.information(
 			self,
 			"Effacer en coupant le moteur",
@@ -451,12 +478,11 @@ class DtcPage(BasePage):
 			"2. Cliquez sur OK : l'application envoie la demande d'effacement en boucle "
 			"(le calculateur la refuse tant que le moteur tourne).\n"
 			"3. Coupez le moteur par un appui sur START/STOP dans les 60 secondes.\n\n"
-			"L'effacement est accepté pendant la coupure. Redémarrez ensuite et relisez les codes pour vérifier.",
+			"L'effacement est accepté pendant la coupure. Redémarrez ensuite et relisez pour vérifier.",
 			QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
 		)
 		if answer != QMessageBox.StandardButton.Ok:
 			return
-		before = self.report
 		stop = threading.Event()
 		progress = {"attempts": 0, "state": "en attente"}
 		dialog = QMessageBox(self)
@@ -475,7 +501,7 @@ class DtcPage(BasePage):
 		timer.start()
 		dialog.setModal(False)
 		dialog.show()
-		self.clear_stop_btn.setEnabled(False)
+		button.setEnabled(False)
 		self._clear_dialog = dialog
 
 		def on_attempt(count: int, state: str) -> None:  # thread de travail : simples affectations
@@ -485,19 +511,15 @@ class DtcPage(BasePage):
 		def finish() -> None:
 			timer.stop()
 			dialog.done(0)
-			self.clear_stop_btn.setEnabled(self.ctx.service.state == LinkState.CONNECTED)
+			button.setEnabled(self.ctx.service.state == LinkState.CONNECTED)
 
 		def done(attempts: int) -> None:
 			finish()
-			self._record_clear(before, "effacement pendant la coupure du moteur")
-			self.status.setText(
-				f"<span style='color:{theme.COLOR_OK}'>Codes effacés pendant la coupure du moteur "
-				f"(demande n° {attempts}).</span> Redémarrez puis cliquez sur « Lire les codes » pour vérifier."
-			)
+			success(attempts)
 			QMessageBox.information(
 				self,
 				"Effacement réussi",
-				"Le calculateur a confirmé l'effacement. Redémarrez le moteur puis relisez les codes pour vérifier.",
+				"Le calculateur a confirmé l'effacement. Redémarrez le moteur puis relisez pour vérifier.",
 			)
 
 		def failed(error: ObdError) -> None:
@@ -506,13 +528,120 @@ class DtcPage(BasePage):
 				QMessageBox.warning(self, "Effacement impossible", error.user_message)
 
 		self.ctx.bridge.run(
-			self.ctx.service.submit(
-				lambda link: dtc.clear_during_engine_stop(link, stop.is_set, on_attempt),
-				"effacement pendant la coupure",
-				priority=1,
-			),
+			self.ctx.service.submit(lambda link: run(link, stop.is_set, on_attempt), job_name, priority=1), done, failed
+		)
+
+	# ------------------------------------------------- défauts constructeur
+	def _build_renault_tab(self) -> QWidget:
+		box = QWidget()
+		layout = QVBoxLayout(box)
+		info = QLabel(
+			"Les calculateurs moteur Renault ont une seconde mémoire de défauts, propre au constructeur : elle pilote "
+			"par exemple le message « Injection à contrôler » et n'est pas effacée par l'effacement OBD (mode 04). "
+			"Lecture : services 17/18 ; effacement : 14 FF 00, adressés au calculateur moteur (7E0). "
+			"Un défaut « présent » reviendra tant que sa cause n'est pas réparée."
+		)
+		info.setWordWrap(True)
+		info.setObjectName("pageSubtitle")
+		layout.addWidget(info)
+		row = QHBoxLayout()
+		self.renault_read_btn = QPushButton("Lire les défauts constructeur")
+		self.renault_read_btn.clicked.connect(self.read_renault_faults)
+		self.renault_clear_btn = QPushButton("Effacer les défauts constructeur…")
+		self.renault_clear_btn.clicked.connect(self._clear_renault)
+		self.renault_stop_btn = QPushButton("Effacer en coupant le moteur…")
+		self.renault_stop_btn.clicked.connect(self._clear_renault_during_stop)
+		for button in (self.renault_read_btn, self.renault_clear_btn, self.renault_stop_btn):
+			row.addWidget(button)
+		row.addStretch(1)
+		layout.addLayout(row)
+		self.renault_table = QTableWidget(0, 4)
+		self.renault_table.setHorizontalHeaderLabels(["Code", "Description", "État (ISO 14230, indicatif)", "Brut"])
+		self.renault_table.verticalHeader().hide()
+		self.renault_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+		header = self.renault_table.horizontalHeader()
+		header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+		header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+		layout.addWidget(self.renault_table)
+		self.renault_status = QLabel()
+		self.renault_status.setWordWrap(True)
+		self.renault_status.setTextFormat(Qt.TextFormat.RichText)
+		layout.addWidget(self.renault_status)
+		return box
+
+	def read_renault_faults(self) -> None:
+		"""Lit la mémoire de défauts constructeur du calculateur moteur."""
+		self.renault_read_btn.setEnabled(False)
+		self.renault_status.setText("Lecture de la mémoire constructeur…")
+		self.ctx.bridge.run(
+			self.ctx.service.submit(faults.read_faults, "défauts constructeur", priority=1),
+			self._show_renault_faults,
+			self._renault_error,
+		)
+
+	def _show_renault_faults(self, result: tuple[list[faults.RenaultFault], str]) -> None:
+		found, request = result
+		self.renault_read_btn.setEnabled(self.ctx.service.state == LinkState.CONNECTED)
+		self.renault_table.setRowCount(0)
+		for fault in found:
+			row = self.renault_table.rowCount()
+			self.renault_table.insertRow(row)
+			values = [fault.code, fault.description, fault.state, f"{fault.raw} {fault.status:02X}"]
+			for column, value in enumerate(values):
+				item = QTableWidgetItem(value)
+				if column == 2:
+					item.setForeground(QBrush(QColor(theme.COLOR_ERROR if fault.present else theme.COLOR_WARN)))
+				self.renault_table.setItem(row, column, item)
+		if not found:
+			self.renault_status.setText(
+				f"<span style='color:{theme.COLOR_OK}'>Mémoire constructeur vide</span> (requête {request})."
+			)
+		else:
+			present = sum(f.present for f in found)
+			self.renault_status.setText(
+				f"{len(found)} défaut(s) constructeur, dont {present} présent(s) (requête {request}). "
+				"Un défaut présent reviendra après effacement tant que sa cause n'est pas réparée."
+			)
+
+	def _renault_error(self, error: ObdError) -> None:
+		self.renault_read_btn.setEnabled(self.ctx.service.state == LinkState.CONNECTED)
+		self.renault_status.setText(f"<span style='color:{theme.COLOR_ERROR}'>{html.escape(error.user_message)}</span>")
+
+	def _renault_cleared(self, attempts: int) -> None:
+		self._record_clear(self.report, "effacement des défauts constructeur (14 FF 00)")
+		self.renault_status.setText(
+			f"<span style='color:{theme.COLOR_OK}'>Défauts constructeur effacés</span> (demande n° {attempts}). "
+			"Redémarrez puis relisez pour vérifier."
+		)
+		self.renault_table.setRowCount(0)
+
+	def _clear_renault(self) -> None:
+		if not self._confirm_clear():
+			return
+		self.renault_clear_btn.setEnabled(False)
+
+		def done(attempts: int) -> None:
+			self.renault_clear_btn.setEnabled(True)
+			self._renault_cleared(attempts)
+
+		def failed(error: ObdError) -> None:
+			self.renault_clear_btn.setEnabled(True)
+			QMessageBox.warning(self, "Effacement impossible", error.user_message)
+
+		self.ctx.bridge.run(
+			self.ctx.service.submit(faults.clear_faults, "effacement des défauts constructeur", priority=1),
 			done,
 			failed,
+		)
+
+	def _clear_renault_during_stop(self) -> None:
+		if not self._confirm_clear():
+			return
+		self._clear_with_engine_stop(
+			self.renault_stop_btn,
+			"effacement constructeur pendant la coupure",
+			lambda link, stop, on_attempt: faults.clear_faults(link, True, stop, on_attempt),
+			self._renault_cleared,
 		)
 
 	# -------------------------------------------------------------- rapport
@@ -617,5 +746,7 @@ class DtcPage(BasePage):
 		self.clear_btn.setEnabled(connected)
 		self.clear_stop_btn.setEnabled(connected)
 		self.checkup_btn.setEnabled(connected)
+		for button in (self.renault_read_btn, self.renault_clear_btn, self.renault_stop_btn):
+			button.setEnabled(connected)
 		if not connected and event.state != LinkState.CONNECTING:
 			self.status.setText("Connectez-vous au véhicule pour lire les codes défaut.")
