@@ -7,7 +7,8 @@ Constat sur Clio III 1.6 16v à carte (11/11/2026) : 14 FF 00 n'est accepté qu'
 sinon) et reste refusé (7F 14 22) moteur tournant, pendant la coupure, puis tant que la session maintient le
 calculateur éveillé après l'arrêt ; les services OBD (04) sont eux refusés en adressage physique (7F 04 11), les deux
 effacements ne peuvent donc pas partager la même session. L'effacement constructeur exige « contact mis, moteur
-arrêté », calculateur alimenté.
+arrêté », calculateur alimenté : obtenu par le contact forcé (appui long sur START sans pédale), où 14 FF 00 a
+répondu 54 FF 00 ; un simple appui sur START laisse le calculateur moteur éteint.
 """
 
 from __future__ import annotations
@@ -34,8 +35,9 @@ VOLTAGE_PERIOD_S = 1.0
 NEEDS_IGNITION = (
 	"Le calculateur n'accepte l'effacement des défauts constructeur que contact mis, moteur arrêté "
 	"(réponse 7F 14 22 « conditions non remplies » moteur tournant comme après la coupure). "
-	"Mettez le contact sans démarrer (carte insérée, appui sur START sans toucher les pédales, voyants moteur "
-	"et pression d'huile allumés) puis utilisez « Effacer les défauts constructeur… »."
+	"Sur un véhicule à carte, mettez le contact forcé : carte insérée, appui long (5 s environ) sur START sans "
+	"toucher les pédales, jusqu'à l'allumage des voyants moteur et pression d'huile ; attendez quelques secondes "
+	"que le calculateur réponde, puis utilisez « Effacer les défauts constructeur… »."
 )
 
 # État de stockage (bits 6-5 de l'octet d'état, ISO 14230-3).
@@ -194,7 +196,11 @@ def clear_faults(
 				silent += 1
 				state = "pas de réponse"
 				if not during_engine_stop:
-					raise ObdError(ErrorKind.NO_DATA, "(effacement des défauts constructeur)")
+					raise ObdError(
+						ErrorKind.NO_DATA,
+						"(effacement des défauts constructeur : calculateur moteur muet ; sur un véhicule à carte, "
+						"contact forcé par un appui long sur START sans pédale, puis patienter quelques secondes)",
+					)
 				if answered and silent >= silent_limit:
 					raise ObdError(
 						ErrorKind.UNABLE_TO_CONNECT,

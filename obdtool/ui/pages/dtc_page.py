@@ -541,6 +541,7 @@ class DtcPage(BasePage):
 			"Lecture : services 17/18 ; effacement : 14 FF 00, adressés au calculateur moteur (7E0). "
 			"L'effacement n'est accepté que <b>contact mis, moteur arrêté</b> : moteur tournant ou juste après la "
 			"coupure, le calculateur répond « conditions non remplies » (7F 14 22). "
+			"Véhicule à carte : contact forcé par un appui long sur START sans pédale. "
 			"Un défaut « présent » reviendra tant que sa cause n'est pas réparée."
 		)
 		info.setWordWrap(True)
@@ -554,7 +555,8 @@ class DtcPage(BasePage):
 		self.renault_stop_btn = QPushButton("Effacer en coupant le moteur…")
 		self.renault_stop_btn.clicked.connect(self._clear_renault_during_stop)
 		self.renault_clear_btn.setToolTip(
-			"Contact mis, moteur arrêté (carte insérée, appui sur START sans toucher les pédales)."
+			"Contact mis, moteur arrêté. Véhicule à carte : contact forcé, carte insérée, appui long (5 s environ)\n"
+			"sur START sans toucher les pédales ; le calculateur met quelques secondes à répondre."
 		)
 		self.renault_stop_btn.setToolTip(
 			"Tentative pour les calculateurs injoignables contact mis : demande répétée pendant la coupure du moteur.\n"

@@ -210,7 +210,11 @@ de bord. L'effacement OBD (mode 04) éteint le voyant MIL mais **n'efface pas ce
 (présent, mémorisé, intermittent — interprétation ISO 14230 indicative) et l'efface (`14FF00`). Un défaut
 **présent** reviendra tant que sa cause n'est pas réparée.
 
-L'effacement constructeur n'est accepté que **contact mis, moteur arrêté**, calculateur alimenté. Relevé sur Clio III
+L'effacement constructeur n'est accepté que **contact mis, moteur arrêté**, calculateur alimenté. Sur un véhicule
+à carte, un simple appui sur START sans pédale laisse le calculateur moteur éteint : il faut le **contact forcé**
+(carte insérée, appui long d'environ 5 s sur START sans toucher les pédales), attendre quelques secondes que le
+calculateur réponde, puis cliquer sur « Effacer les défauts constructeur… » (vérifié : réponse `54 FF 00`, mémoire
+passée de 6 défauts à 1). L'effacement OBD passe aussi dans cet état, sans la procédure de coupure. Relevé sur Clio III
 1.6 16v à carte : `14FF00` répond `7F 14 80` hors session de diagnostic et `7F 14 22` (conditions non remplies)
 moteur tournant, pendant la coupure, puis aussi longtemps que la session maintient le calculateur éveillé après
 l'arrêt ; l'effacement OBD (`04`) ne passe, lui, qu'en adressage fonctionnel (`7F 04 11` sur 7E0) : les deux ne
