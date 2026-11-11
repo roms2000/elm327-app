@@ -148,3 +148,48 @@ def test_clear_request_stays_outside_read_only_path() -> None:
 	assert bytes.fromhex("14FF00") == CLEAR_ALL_FAULTS
 	for read in ("17FF00", "1802FF00"):
 		check_read_only(read)
+
+
+class _RefusingLink:
+	"""Calculateur qui refuse 14 FF 00 (7F 14 22) et reste éveillé ; la tension chute à l'arrêt du moteur."""
+
+	def __init__(self, voltages: list[float]) -> None:
+		self.voltages = voltages
+		self.clears = 0
+
+	def send_raw(self, command: str, check: bool = True, timeout: float | None = None, clean: bool = True) -> list[str]:
+		if command.startswith("AT"):
+			return ["OK"]
+		if command == "14FF00":
+			self.clears += 1
+			return ["7E8 03 7F 14 22"]
+		return {"10C0": ["7E8 02 50 C0"], "1081": ["7E8 02 50 81"]}[command]
+
+	def read_voltage(self) -> float:
+		return self.voltages.pop(0) if len(self.voltages) > 1 else self.voltages[0]
+
+	def restore_defaults(self) -> bool:
+		return True
+
+
+def test_clear_refused_after_engine_stop_ends_with_explanation(monkeypatch: pytest.MonkeyPatch) -> None:
+	from obdtool.core.ddt import faults
+
+	monkeypatch.setattr(faults, "VOLTAGE_PERIOD_S", 0.0)
+	link = _RefusingLink([14.4, 14.3, 12.4])
+	with pytest.raises(ObdError) as err:
+		faults.clear_faults(link, during_engine_stop=True, window_s=5.0, stop_grace_s=0.2)  # type: ignore[arg-type]
+	assert err.value.kind == ErrorKind.NEGATIVE_RESPONSE
+	assert "Moteur coupé" in err.value.user_message and "contact mis" in err.value.user_message
+	assert link.clears >= 2
+
+	# Moteur jamais coupé : le délai s'écoule, sans prétendre que le moteur tourne encore par erreur de diagnostic.
+	running = _RefusingLink([14.4])
+	with pytest.raises(ObdError) as err:
+		faults.clear_faults(running, during_engine_stop=True, window_s=0.3)  # type: ignore[arg-type]
+	assert err.value.kind == ErrorKind.TIMEOUT and "7F 14 22" in err.value.user_message
+
+	# Demande simple : le refus explique la condition « contact mis, moteur arrêté ».
+	with pytest.raises(ObdError) as err:
+		faults.clear_faults(_RefusingLink([14.4]))  # type: ignore[arg-type]
+	assert err.value.kind == ErrorKind.NEGATIVE_RESPONSE and "contact mis" in err.value.user_message

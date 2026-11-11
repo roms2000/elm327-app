@@ -207,8 +207,16 @@ l'effacement, kilométrage saisi à la main). Un code revenu après un effacemen
 mémoire de défauts, propre au constructeur, qui pilote par exemple le message « Injection à contrôler » du tableau
 de bord. L'effacement OBD (mode 04) éteint le voyant MIL mais **n'efface pas cette mémoire**. L'onglet la lit
 (services KWP2000 `17FF00` / `1802FF00`, adressés au calculateur moteur 7E0) avec l'état de chaque défaut
-(présent, mémorisé, intermittent — interprétation ISO 14230 indicative) et l'efface (`14FF00`), y compris « en
-coupant le moteur » pour les véhicules sans clé. Un défaut **présent** reviendra tant que sa cause n'est pas réparée.
+(présent, mémorisé, intermittent — interprétation ISO 14230 indicative) et l'efface (`14FF00`). Un défaut
+**présent** reviendra tant que sa cause n'est pas réparée.
+
+L'effacement constructeur n'est accepté que **contact mis, moteur arrêté**, calculateur alimenté. Relevé sur Clio III
+1.6 16v à carte : `14FF00` répond `7F 14 80` hors session de diagnostic et `7F 14 22` (conditions non remplies)
+moteur tournant, pendant la coupure, puis aussi longtemps que la session maintient le calculateur éveillé après
+l'arrêt ; l'effacement OBD (`04`) ne passe, lui, qu'en adressage fonctionnel (`7F 04 11` sur 7E0) : les deux ne
+peuvent pas être envoyés dans la même session. « Effacer en coupant le moteur » reste proposé pour d'autres
+calculateurs ; il détecte l'arrêt du moteur par la chute de la tension de bord et s'arrête 5 s après si le
+calculateur refuse toujours, en l'expliquant. Les refus sont journalisés avec la réponse brute.
 
 **Exporter le rapport** (HTML ou texte) et **Bilan complet** (codes, freeze frame, moniteurs, tests mode 06,
 identification).

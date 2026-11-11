@@ -539,6 +539,8 @@ class DtcPage(BasePage):
 			"Les calculateurs moteur Renault ont une seconde mémoire de défauts, propre au constructeur : elle pilote "
 			"par exemple le message « Injection à contrôler » et n'est pas effacée par l'effacement OBD (mode 04). "
 			"Lecture : services 17/18 ; effacement : 14 FF 00, adressés au calculateur moteur (7E0). "
+			"L'effacement n'est accepté que <b>contact mis, moteur arrêté</b> : moteur tournant ou juste après la "
+			"coupure, le calculateur répond « conditions non remplies » (7F 14 22). "
 			"Un défaut « présent » reviendra tant que sa cause n'est pas réparée."
 		)
 		info.setWordWrap(True)
@@ -551,6 +553,14 @@ class DtcPage(BasePage):
 		self.renault_clear_btn.clicked.connect(self._clear_renault)
 		self.renault_stop_btn = QPushButton("Effacer en coupant le moteur…")
 		self.renault_stop_btn.clicked.connect(self._clear_renault_during_stop)
+		self.renault_clear_btn.setToolTip(
+			"Contact mis, moteur arrêté (carte insérée, appui sur START sans toucher les pédales)."
+		)
+		self.renault_stop_btn.setToolTip(
+			"Tentative pour les calculateurs injoignables contact mis : demande répétée pendant la coupure du moteur.\n"
+			"Refusée par le calculateur de la Clio III 1.6 16v (7F 14 22) : l'application s'arrête alors quelques "
+			"secondes après l'arrêt du moteur et l'indique."
+		)
 		for button in (self.renault_read_btn, self.renault_clear_btn, self.renault_stop_btn):
 			row.addWidget(button)
 		row.addStretch(1)
